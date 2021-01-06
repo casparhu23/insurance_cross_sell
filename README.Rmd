@@ -1,0 +1,26 @@
+---
+always_allow_html: true
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+hello-world
+Just another repository
+
+Hi people!
+This is Caspar!!
+
+??
+ben it is
+
+```{r}
+library(data.table)
+
+bank <- fread('bank-full.csv')
+
+summary(bank)
+```
+
