@@ -19,7 +19,7 @@ ben it is
 ```{r}
 library(data.table)
 
-bank <- fread('bank-full.csv')
+#bank <- fread('bank-full.csv')
 
 summary(bank)
 ```
