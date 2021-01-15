@@ -335,19 +335,6 @@ We can see a huge comparison that the annual premium is much higher for `> 2 yea
 
 
 ```{r}
-intMod2<- lm(Annual_Premium ~ Gender*Vehicle_Damage , data = train)
-
-summary(intMod2)
-
-library(effects)
-
-modEffects2 <- effect("Gender*Vehicle_Damage", intMod2)
-
-plot(modEffects2)
-```
-
-
-```{r}
 intMod3<- lm(Annual_Premium ~ Response*Vehicle_Insured , data = train)
 
 summary(intMod3)
@@ -817,6 +804,8 @@ confusionMatrix(as.factor(rf_pred_class),
 ###??? Accuracy is 66.54% and sensitivity is 95.67%
 
 XGBoost 
+
+###??? magic numbers
 
 ```{r}
 library(xgboost)

@@ -7,20 +7,227 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-hello-world
-Just another repository
-
-Hi people!
-This is Caspar!!
-
-??
-ben it is
-
 ```{r}
+library(haven)
 library(data.table)
-
-#bank <- fread('bank-full.csv')
-
-#summary(bank)
+library(tidyverse)
+library(dplyr)
+train <- fread("data/insurance_train.csv")
+test <- fread("data/insurance_test.csv")
 ```
 
+#### Executive Summary
+
+
+#### Inference Analysis
+
+## Data Exploration and Cleaning
+
+```{r}
+str(train)
+summary(train)
+colnames(train) # check column names for the dataset
+```
+
+```{r}
+ggplot(train, aes(x=Annual_Premium)) + 
+  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
+  theme_bw() + # Set theme for plot
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  scale_x_continuous(labels=comma)+
+  scale_y_continuous(labels=comma)+
+  labs(x = "Annual Premium", # Set plot labels
+       title = "Density plot of Annual Premium")
+
+ggplot(train, aes(x=Age)) + 
+  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
+  theme_bw() + # Set theme for plot
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  scale_y_continuous(labels=comma)+
+  labs(x = "Age", # Set plot labels
+       title = "Density plot of Age")
+```
+
+```{r}
+train <- train%>%
+  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
+  mutate(id=as.character(id),
+         Gender=as.factor(Gender),
+         Driving_License=as.factor(Driving_License),
+         Vehicle_Insured=as.factor(Vehicle_Insured),
+         Vehicle_Age=as.factor(Vehicle_Age),
+         Vehicle_Damage=as.factor(Vehicle_Damage),
+         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
+         Region_Code=as.factor(as.character(Region_Code)),
+         Response=as.factor(as.character(Response)))
+
+train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
+```
+
+## Correlation between Numeric Variables
+
+```{r}
+train_numeric <- train%>%
+  dplyr::select(where(is.numeric))
+
+cor(train_numeric)
+
+library(corrplot)
+
+L <- cor(train_numeric)  # make correlation matrix
+corrplot(L, type="lower")  # make correlation plot
+```
+
+Not too much correlation between those three numeric variables
+
+## Association between Categorical Variables
+```{r}
+chisq.test(train$Response, train$Driving_License, correct = FALSE)
+
+chisq.test(train$Response, train$Vehicle_Damage, correct = FALSE)
+
+chisq.test(train$Response, train$Vehicle_Insured,  correct = FALSE)
+
+chisq.test(train$Response, train$Vehicle_Age,  correct = FALSE)
+```
+
+Since all p values are less than 0.01, we have up to 99% confidence that all four pairs of variables are associated. We can use assoc to see some directions of the association. 
+
+```{r}
+train_factor <- train%>%
+  dplyr::select(where(is.factor))
+
+library(vcd)
+train_factor%>%
+  dplyr::select(Response,Driving_License)%>%
+  assoc(shade=TRUE)
+
+train_factor%>%
+  dplyr::select(Response, Vehicle_Damage)%>%
+  assoc(shade=TRUE)
+
+train_factor%>%
+  dplyr::select(Response,Vehicle_Insured)%>%
+  assoc(shade=TRUE)
+
+train_factor%>%
+  dplyr::select(Response,Vehicle_Age)%>%
+  assoc(shade=TRUE)
+```
+
+We can see customers without a driving license, they are way much less likely to be interested in vehicle insurance, which totally makes sense. A larger amount of customers are interested in the vehicle insurance if their car had some damages in the past. And we can see customers who does not have vehicle insurance are more likely to be interested in company's vehicle insurance. When Vehicles' ages are 1-2 year or 2 years older, customers are more likey to be interested in the vehicle insurance.
+
+## Interaction
+
+```{r}
+intMod<- lm(Annual_Premium ~ Vehicle_Age*Gender , data = train)
+
+summary(intMod)
+
+library(effects)
+
+modEffects <- effect("Vehicle_Age*Gender", intMod)
+
+plot(modEffects)
+```
+
+We can see a huge comparison that the annual premium is much higher for `> 2 years of vehicle age` than the other vehicle ages. Female pays lower for < 1 year of vehicle age than male do, however female pays higher for >2 years and 1-2 year of vehicle age than male do.  
+
+```{r}
+intMod3<- lm(Annual_Premium ~ Response*Vehicle_Insured , data = train)
+
+summary(intMod3)
+
+#library(effects)
+
+modEffects3 <- effect("Response*Vehicle_Insured", intMod3)
+
+plot(modEffects3)
+```
+
+When customers do not have vehicle insurance, customers who are interested in the company's insurance are willing to pay higher annual premium than customers that have no interests.
+
+## Mixed Models
+```{r}
+riMod <- lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
+              data = train)
+
+summary(riMod)
+ranef(riMod)
+MuMIn::r.squaredGLMM(riMod)
+```
+
+Here we have two values: the marginal R2 (R2m) and the conditional R2 (R2c). The marginal values as the standard type of R2 -- it is the variability explained by the fixed effects part of the model.
+The conditional R2 is using both fixed and random effects. So in this case, we would see that we are accounting for about 19% (0.2010-0.0084) of the variation in region alone.
+
+We can also use `lmerTest::lmer` to show the p values associated with the riMod model.
+```{r}
+riModP <- lmerTest::lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
+              data = train) 
+
+summary(riModP)
+```
+
+```{r}
+library(sjPlot)
+
+plot_model(riMod, type = "re") + 
+  theme_minimal()
+```
+
+```{r}
+library(merTools)
+
+plotREsim(REsim(riMod), labs = TRUE)
+```
+
+From the two graphs above, we can see region 28 and 8's annual premium are significantly above average among all the regions. We can extract region top 2 and bottom 2 data from the train data to do further analysis. 
+
+```{r}
+region28 <- train[Region_Code=="28",]  #extract region 28
+
+region8 <- train[Region_Code=="8",]  #extract region 8
+
+region31 <- train[Region_Code=="31",] # extract region 31
+
+region48 <- train[Region_Code=="48",]  #extract region 48
+```
+
+```{r}
+top_2_region <- rbind(region28,region8)
+bottom_2_region <- rbind(region31,region48)
+
+ggplot(data=top_2_region,aes(x=Annual_Premium,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  scale_x_continuous(labels = comma,lim=c(0,100000))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+  
+ggplot(data=top_2_region,aes(x=Age,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  theme_minimal()
+
+ggplot(data=bottom_2_region,aes(x=Annual_Premium,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  scale_x_continuous(labels = comma,lim=c(2500,2700))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+  
+ggplot(data=bottom_2_region,aes(x=Age,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  theme_minimal()
+```
+Top 2 regions: 
+After we limit annual premium from 0 to 100K, we can see that top 2 regions cover almost the same range from 25K to 75K for the majority group of the annual premium. The age histogram shows almost the same pattern that the peaks are similar shown in around 26yrs, 48yrs, 53yrs, 67yrs and 72 yrs old in both 28 and 8 regions. Thus, region 28 and 8 are not so different from each other.
+
+Bottom 2 regions:
+And it is surprised to see the bottom 2 regions also have similarities in annual premium and age too.
+There is only one price for annual premium for both regions. We can see more close match in age histogram.  
+
+#### Prediction Analysis (Machine Learning)
