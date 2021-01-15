@@ -30,6 +30,7 @@ colnames(train) # check column names for the dataset
 ```
 
 ```{r}
+library(scales)
 ggplot(train, aes(x=Annual_Premium)) + 
   geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
   theme_bw() + # Set theme for plot
@@ -155,6 +156,7 @@ When customers do not have vehicle insurance, customers who are interested in th
 
 ## Mixed Models
 ```{r}
+library(lme4)
 riMod <- lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
               data = train)
 
