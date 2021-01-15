@@ -1,0 +1,1090 @@
+---
+title: "insurance_crosssell"
+author: "Caspar Hu"
+date: "12/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(haven)
+library(data.table)
+library(tidyverse)
+library(dplyr)
+train <- fread("data/insurance_train.csv")
+test <- fread("data/insurance_test.csv")
+```
+We have a data set from a health insurance company that collected customers' demographics and information of vehicles combined with the insurance policy accordingly. 
+
+We will take two perspectives toward this data set. One is the `statistics inference` (exploratory) analysis, and the other is the `machine learning` (prediction) analysis.
+
+Before we dive into the data analytics parts, let us do some data cleaning for the variables. 
+
+#### Data Cleaning
+
+column name *Previously_Insured* is not too specific, we can change that into another name and change some variables into factor variables.
+```{r}
+colnames(train) # check column names for the dataset
+
+train <- train%>%
+  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
+  mutate(id=as.character(id),
+         Gender=as.factor(Gender),
+         Driving_License=as.factor(Driving_License),
+         Vehicle_Insured=as.factor(Vehicle_Insured),
+         Vehicle_Age=as.factor(Vehicle_Age),
+         Vehicle_Damage=as.factor(Vehicle_Damage),
+         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
+         Region_Code=as.factor(as.character(Region_Code)),
+         Response=as.factor(as.character(Response)))
+
+
+```
+
+```{r}
+str(train)
+summary(train)
+```
+We found out the levels of Vehicle_Age is a little bit off, the correct order should be < 1 year, 1-2 year, >2 year. Let's change that as well.
+
+```{r}
+train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
+levels(train$Vehicle_Age) #check the level again
+
+```
+
+Checking Missing values and found out there is no missing value in this data set.
+```{r,fig.width=8}
+visdat::vis_miss(train,warn_large_data = FALSE)
+```
+
+We have 381109 observations and 12 variables.
+
+      id:                    Unique ID for the customer
+      Gender:	               Gender of the customer
+      Age:              	   Age of the customer
+      Driving_License	0:     Customer does not have DL, 
+      Driving_License 1:     Customer already has DL
+      Region_Code:      	   Unique code for the region of the customer
+      Vehicle_Insured 1:     Customer already has Vehicle Insurance, 
+      Vehicle_Insured 0:     Customer doesn't have Vehicle Insurance
+      Vehicle_Age:           Age of the Vehicle
+      Vehicle_Damage 1:      Customer got his/her vehicle damaged in the past. 
+      Vehicle_Damage 0:      Customer didn't get his/her vehicle damaged in the past
+      Annual_Premium:	       The amount customer needs to pay as premium in the year
+      PolicySalesChannel:    Anonymized Code for the channel of outreaching to the customer 
+                             ie. Different Agents, Over Mail, Over Phone, In Person, etc.
+      Vintage(NumberofDays): Customer has been associated with the company
+      Response 1:            Customer is interested in vehicle insurance 
+      Response 0:            Customer is not interested in vehicle insurance
+                  
+Here are some main questions that we want to find the answers while we analayze the data from the stats inference perspective
+
+What variables contribute to higher premium?
+What variables contribute to customers' interests in the vehicle insurance?
+Which regions are very different from the others? In other word, which regions perform outstandingly in terms of premium and response to vehicle insurance?
+Which policy channels are very different from the others? In other word, which policy channels attract more people to be interested in the vehicle insurance?
+
+#### Inference Analysis
+
+Density Plot
+
+```{r}
+library(scales)
+ggplot(train, aes(x=Vintage)) + 
+  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
+  theme_bw() + # Set theme for plot
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  scale_y_continuous(labels=comma)+
+  labs(x = "Vintage", # Set plot labels
+       title = "Density plot of Vintage")
+
+
+ggplot(train, aes(x=Annual_Premium)) + 
+  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
+  theme_bw() + # Set theme for plot
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  scale_x_continuous(labels=comma)+
+  scale_y_continuous(labels=comma)+
+  labs(x = "Annual Premium", # Set plot labels
+       title = "Density plot of Annual Premium")
+
+ggplot(train, aes(x=Age)) + 
+  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
+  theme_bw() + # Set theme for plot
+  theme(panel.grid.major = element_blank(), # Turn of the background grid
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  scale_y_continuous(labels=comma)+
+  labs(x = "Age", # Set plot labels
+       title = "Density plot of Age")
+
+```
+
+Looks like we have vintage across evenly from 0 to 300. Majority of Annual_Premium are below 100,000 but there are some bigger outliers above 400,000. Customers' ages are between 20 and 80ish. Younger customers(age 22ish) are the biggest group and the second biggest group falls in around 43.  
+
+```{r}
+ggplot(data = train,
+         aes(x = Age, color = Response )) +
+  geom_density() +
+  scale_fill_manual(values = c("1" = "red", "0" = "blue"), # Set fill colors manually
+                    labels = c("1" = "Malignant", "0" = "Benign"))+ # Set labels for fill
+  geom_vline(aes(xintercept = mean(train$Age), 
+                 linetype = "Average Age"), 
+                 color = "black")  
+```
+People who are older than 30 years old and younger than 63 years old are likely to be interested in buying vehicle insurance.
+
+```{r}
+ggplot(data = train,
+       aes(x =Age, y =Annual_Premium,color=Gender))+ 
+  geom_point(alpha=0.6)+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+```
+It seems that more women customers appeared more in their 20s compared to male customers. And we saw many premium falls below 200,000. Thus, let us digger deeper into annual premium less than 200,000.
+
+```{r}
+ggplot(data = train,
+       aes(x =Age , y =Annual_Premium,color=Gender))+ 
+  geom_point(alpha=0.6)+
+  scale_y_continuous(labels = comma,lim=c(0,200000))+
+  theme_minimal()
+```
+We see a much clearer picture, but still the same insights as the previous graph.
+
+###Which policy channels are very different from the others? In other word, which policy channels attract more people to be interested in the vehicle insurance?
+
+```{r}
+train%>%
+  filter(Response=="1")%>%
+  group_by(Policy_Sales_Channel)%>%
+  summarise(responseYes=sum(as.numeric(Response)))%>%
+  arrange(-responseYes)
+```
+
+Top 3 policy sales channel 26, 124, 152 channel has got 31782 customers in favor of the vehicle insurance.
+
+Let us start with policy channel 26:
+```{r}
+psc26 <- train%>%
+  filter(Policy_Sales_Channel=="26")
+
+# it is very difficult to see the distributions there are some outliers above 120000 annual premium for three channels, so we set the limit to 120,000 annual premium
+ggplot(data=psc26, aes(x=Annual_Premium,fill=Response))+
+  geom_histogram()+
+  scale_x_continuous(labels = comma,lim=c(0,120000))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()+
+  labs(x = "Annual_Premium", # Set plot labels
+       title = "Density plot of Annual_Premium in Channel 26")
+  
+
+psc124 <- train%>%
+  filter(Policy_Sales_Channel=="124")
+
+ggplot(data=psc124, aes(x=Annual_Premium,fill=Response))+
+  geom_histogram()+
+  scale_x_continuous(labels = comma,lim=c(0,120000))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()+
+  labs(x = "Annual_Premium", # Set plot labels
+       title = "Density plot of Annual_Premium in Channel 124")
+
+psc152 <- train%>%
+  filter(Policy_Sales_Channel=="152")
+
+ggplot(data=psc152, aes(x=Annual_Premium,fill=Response))+
+  geom_histogram()+
+  scale_x_continuous(labels = comma,lim=c(0,120000))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()+
+  labs(x = "Annual_Premium", # Set plot labels
+       title = "Density plot of Annual_Premium in Channel 152")
+
+```
+Within 120K annual premium boundary, customers responded yes to vehicle insurance in policy sales channel 26 and 124, annual premium appear in similar range from 25K to 75K, while policy sales channel 152 has very low range from 25,000 to 50,000. 
+
+```{r}
+top3_psc <- rbind(psc26,psc124,psc152)
+
+top3_psc_yes <- top3_psc[Response=="1",]
+
+ggplot(data=top3_psc_yes,aes(x=Annual_Premium,fill=Policy_Sales_Channel))+
+  geom_histogram(alpha=0.5)+
+  scale_x_continuous(labels = comma,lim=c(0,120000))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+  
+ggplot(data=top3_psc_yes,aes(x=Age,fill=Policy_Sales_Channel))+
+  geom_histogram(alpha=0.5)+
+  theme_minimal()
+```
+Within 120,000 annual premium boundary, when we combine three channels data into one data set, and we can see channel 124 has more favored responses between 25,000 and 75,000 compared to the other channels. As for age, channel 124 attracts customers from late 30s to 50s. Channel 152 attracts customers in early 20s and middle 40s and 50s. And the most interesting fact is that channel 26 almost covers the majority of area of channel 152. 
+
+###Which regions are very different from the others? In other word, which regions perform outstandingly in terms of premium and response to vehicle insurance?
+
+```{r}
+library(data.table)
+
+train_region <- train[,c("Region_Code","Annual_Premium")]
+train_region <- data.table(train_region) 
+train_region <- train_region[,
+                             list("Premium_Mean" = mean(Annual_Premium)), 
+                             by= list(Region_Code)]
+
+train_region <-train_region[order(-Premium_Mean)]  #descending order for premium_mean
+
+```
+
+Which region(s) had the highest effect premium and which region(s) had the lowest premium mean?
+Highest region premium mean: 28,8,17
+Lowest region premium mean: 31,48,1
+
+```{r}
+train <- as.data.table(train)
+region_high_premium <- train[Region_Code==28 | Region_Code==8 | Region_Code==17,]
+region_low_premium <- train[Region_Code==31 | Region_Code==48 | Region_Code==1,]
+
+region_high_low_premium <- rbind(region_high_premium,region_low_premium)
+
+
+g_1 <- ggplot(data=region_high_low_premium, aes(x=Vintage,y=Annual_Premium,color=as.factor(Region_Code)))+
+  geom_point(size=3,alpha=0.3)+
+  scale_y_continuous(labels = comma)
+
+g_1
+```
+It seems that region 28 has a lot of customers. The majority of those customers' annual premium are below 150,000 but there are quite a few extremely high annual premium above 200,000 threshold line.
+
+## Correlation between Numeric Variables
+
+```{r}
+train_numeric <- train%>%
+  dplyr::select(where(is.numeric))
+
+cor(train_numeric)
+
+library(corrplot)
+
+L <- cor(train_numeric)  # make correlation matrix
+corrplot(L, type="lower")  # make correlation plot
+```
+Not too much correlation between those three numeric variables
+
+## Association between Categorical Variables
+```{r}
+chisq.test(train$Response, train$Driving_License, correct = FALSE)
+
+chisq.test(train$Response, train$Vehicle_Damage, correct = FALSE)
+
+chisq.test(train$Response, train$Vehicle_Insured,  correct = FALSE)
+
+chisq.test(train$Response, train$Vehicle_Age,  correct = FALSE)
+```
+Since all p values are less than 0.01, we have up to 99% confidence that all four pairs of variables are associated. We can use assoc to see some directions of the association. 
+
+```{r}
+train_factor <- train%>%
+  dplyr::select(where(is.factor))
+
+library(vcd)
+train_factor%>%
+  dplyr::select(Response,Driving_License)%>%
+  assoc(shade=TRUE)
+
+train_factor%>%
+  dplyr::select(Response, Vehicle_Damage)%>%
+  assoc(shade=TRUE)
+
+train_factor%>%
+  dplyr::select(Response,Vehicle_Insured)%>%
+  assoc(shade=TRUE)
+
+train_factor%>%
+  dplyr::select(Response,Vehicle_Age)%>%
+  assoc(shade=TRUE)
+```
+
+We can see customers without a driving license, they are way much less likely to be interested in vehicle insurance, which totally makes sense. A larger amount of customers are interested in the vehicle insurance if their car had some damages in the past. And we can see customers who does not have vehicle insurance are more likely to be interested in company's vehicle insurance. When Vehicles' ages are 1-2 year or 2 years older, customers are more likey to be interested in the vehicle insurance.
+
+##Interaction
+
+```{r}
+intMod<- lm(Annual_Premium ~ Vehicle_Age*Gender , data = train)
+
+summary(intMod)
+
+library(effects)
+
+modEffects <- effect("Vehicle_Age*Gender", intMod)
+
+plot(modEffects)
+```
+We can see a huge comparison that the annual premium is much higher for `> 2 years of vehicle age` than the other vehicle ages. Female pays lower for < 1 year of vehicle age than male do, however female pays higher for >2 years and 1-2 year of vehicle age than male do.  
+
+
+```{r}
+intMod2<- lm(Annual_Premium ~ Gender*Vehicle_Damage , data = train)
+
+summary(intMod2)
+
+library(effects)
+
+modEffects2 <- effect("Gender*Vehicle_Damage", intMod2)
+
+plot(modEffects2)
+```
+
+
+```{r}
+intMod3<- lm(Annual_Premium ~ Response*Vehicle_Insured , data = train)
+
+summary(intMod3)
+
+#library(effects)
+
+modEffects3 <- effect("Response*Vehicle_Insured", intMod3)
+
+plot(modEffects3)
+```
+
+When customers do not have vehicle insurance, customers who are interested in the company's insurance are willing to pay higher annual premium than customers that have no interests.
+
+##Quantile Regression Analysis
+
+```{r}
+quantile(train$Age,probs =.25,na.rm = TRUE)
+quantile(train$Age,probs =.50,na.rm = TRUE)
+quantile(train$Age,probs =.75,na.rm = TRUE)
+```
+
+```{r}
+library(quantreg)
+quantTest25 <- rq(Annual_Premium ~ Age, tau = .25, #25th quartile
+                  data = train)
+
+summary(quantTest25)  #coeff is 17
+
+quantTest50 <- rq(Annual_Premium ~ Age, tau = .5, #50th quartile
+                  data = train)
+
+summary(quantTest50) #coeff is 102
+
+quantTest75 <- rq(Annual_Premium ~ Age, tau = .75, #75th quartile
+                  data = train)
+
+summary(quantTest75) #coeff is 166
+
+```
+At 25th quantile point of the annual_premium, when age increases by 1, the annual_premium will increase by 17.66
+At 50th quantile point of the annual_premium, when age increases by 1, the annual_premium will increase by 102.86
+At 75th quantile point of the annual_premium, when age increases by 1, the annual_premium will increase by 166.11
+
+```{r}
+ggplot(train, aes(Age,Annual_Premium)) + geom_point() + 
+  geom_abline(intercept=coef(quantTest25)[1], slope=coef(quantTest25)[2],col="blue")+
+  geom_abline(intercept=coef(quantTest50)[1], slope=coef(quantTest50)[2],col="green")+
+  geom_abline(intercept=coef(quantTest75)[1], slope=coef(quantTest75)[2],col="red")
+```
+## Normal Linear Analysis - OLS
+
+```{r}
+olsTest <- lm(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage, data = train)
+summary(olsTest)
+```
+
+## Robust Regression Analysis
+```{r}
+library(MASS)
+robustTest <- rlm(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage,
+                  data=train,psi=psi.bisquare)
+summary(robustTest)
+```
+
+# Robust Standard Errors 
+```{r}
+plot(olsTest$fitted.values, olsTest$residuals)
+
+lmtest::bptest(olsTest)
+```
+We want a residual and fitt constant, but here we see p value is small, so we have heteroscedasticity
+
+```{r}
+library(sandwich)
+lmtest::coeftest(olsTest, vcov=vcovHC)
+```
+
+
+## Generalized Linear Model == linear model 
+
+```{r}
+lmTest <- glm(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage,
+              data=train,
+              family = gaussian)
+
+summary(lmTest)
+```
+
+##Logistic model
+
+```{r}
+logTest <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicle_Insured + 
+               Vehicle_Age + Vehicle_Damage + Region_Code+Policy_Sales_Channel, data = train, 
+               family = binomial)  
+
+summary(logTest)
+
+exp(logTest$coefficients)
+```
+
+Male customers are about 9.5% likely to be interested in the vehicle insurance than female customers.
+Customers with driving license are about 231.7% likely to be interested in the vehicle insurance.
+Older vehicles(elder than 2 years) are about 331% likely to be interested in the vehicle insurance.
+Damaged vehicles are about 658.7% likely to be interested in the vehicle insurance.
+
+Mixed Models (Fixed + Random)
+
+```{r}
+interceptMod <- lmer(Annual_Premium ~ 1+(1|Region_Code), 
+              data = train)
+
+summary(interceptMod)
+```
+
+```{r}
+riMod <- lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
+              data = train)
+
+summary(riMod)
+ranef(riMod)
+MuMIn::r.squaredGLMM(riMod)
+```
+Here we have two values: the marginal R2 (R2m) and the conditional R2 (R2c). The marginal values as the standard type of R2 -- it is the variability explained by the fixed effects part of the model.
+The conditional R2 is using both fixed and random effects. So in this case, we would see that we are accounting for about 19% (0.2010-0.0084) of the variation in region alone.
+
+We can also use `lmerTest::lmer` to show the p values associated with the riMod model.
+```{r}
+riModP <- lmerTest::lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
+              data = train) 
+
+summary(riModP)
+```
+
+
+```{r}
+library(sjPlot)
+
+plot_model(riMod, type = "re") + 
+  theme_minimal()
+```
+```{r}
+library(merTools)
+
+plotREsim(REsim(riMod), labs = TRUE)
+```
+From the two graphs above, we can see region 28 and 8's annual premium are significantly above average among all the regions. We can extract region top 2 and bottom 2 data from the train data to do further analysis. 
+
+```{r}
+region28 <- train[Region_Code=="28",]  #extract region 28
+
+region8 <- train[Region_Code=="8",]  #extract region 8
+
+region31 <- train[Region_Code=="31",] # extract region 31
+
+region48 <- train[Region_Code=="48",]  #extract region 48
+```
+
+```{r}
+top_2_region <- rbind(region28,region8)
+bottom_2_region <- rbind(region31,region48)
+
+ggplot(data=top_2_region,aes(x=Annual_Premium,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  scale_x_continuous(labels = comma,lim=c(0,100000))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+  
+ggplot(data=top_2_region,aes(x=Age,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  theme_minimal()
+
+ggplot(data=bottom_2_region,aes(x=Annual_Premium,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  scale_x_continuous(labels = comma,lim=c(2500,2700))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+  
+ggplot(data=bottom_2_region,aes(x=Age,fill=Region_Code))+
+  geom_histogram(alpha=0.5)+
+  theme_minimal()
+```
+Top 2 regions: 
+After we limit annual premium from 0 to 100K, we can see that top 2 regions cover almost the same range from 25K to 75K for the majority group of the annual premium. The age histogram shows almost the same pattern that the peaks are similar shown in around 26yrs, 48yrs, 53yrs, 67yrs and 72 yrs old in both 28 and 8 regions. Thus, region 28 and 8 are not so different from each other.
+
+Bottom 2 regions:
+And it is surprised to see the bottom 2 regions also have similarities in annual premium and age too.
+There is only one price for annual premium for both regions. We can see more close match in age histogram.  
+
+## Random Slopes
+```{r}
+randomSlopes <- lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(Age|Region_Code), 
+                     data = train)
+
+summary(randomSlopes)
+```
+
+We can use all the models to make the predictions and use graph to identify the accuracy briefly.
+```{r}
+mixedPred <- predict(riMod)
+
+slimPred <- predict(olsTest)
+
+randPred <- predict(randomSlopes)
+
+allPred <- cbind(actual = train$Annual_Premium, 
+      mixed = mixedPred, 
+      slim = slimPred,
+      random =randPred)
+
+head(allPred, 20)
+
+plot(allPred[, "actual"], allPred[, "slim"])
+plot(allPred[, "actual"], allPred[, "mixed"])
+plot(allPred[, "actual"], allPred[, "random"])
+```
+From the graphs above, we cannot see a clear pattern between the actual numbers and predict numbers, thus all of the models cannot predict very well. 
+
+## Prediction Analysis (Machine Learning)
+
+Data Cleaning 
+
+```{r}
+#install.packages("fastDummies")
+library(fastDummies)
+
+train <- train%>%
+  mutate(Vehicle_Age=ifelse(Vehicle_Age=="< 1 Year","1",
+                            ifelse(Vehicle_Age=="1-2 Year","2","3")))
+#mark "< 1 Year" as 1, "1-2 Year" as 2, "> 2 Years" as 3
+                            
+train_dum <- dummy_cols(train[,c("Gender","Driving_License","Vehicle_Insured","Vehicle_Age","Vehicle_Damage")]) #make dummy variables 
+
+train_dum <- train_dum%>%
+  dplyr::select(-c(1:5)) #get rid of some columns
+
+
+train_data <- cbind(train[,c("Age","Annual_Premium","Vintage")],train_dum,train[,"Response"])
+
+str(train_data)
+
+test <- fread("data/insurance_test.csv")
+test <- test%>%
+  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
+  mutate(id=as.character(id),
+         Gender=as.factor(Gender),
+         Driving_License=as.factor(Driving_License),
+         Vehicle_Insured=as.factor(Vehicle_Insured),
+         Vehicle_Age=as.factor(Vehicle_Age),
+         Vehicle_Damage=as.factor(Vehicle_Damage),
+         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
+         Region_Code=as.factor(as.character(Region_Code)))
+test$Vehicle_Age <- fct_relevel(test$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
+levels(test$Vehicle_Age) #check the level again
+
+test <- test%>%
+  mutate(Vehicle_Age=ifelse(Vehicle_Age=="< 1 Year","1",
+                            ifelse(Vehicle_Age=="1-2 Year","2","3")))
+#mark "< 1 Year" as 1, "1-2 Year" as 2, "> 2 Years" as 3
+
+test_dum <- dummy_cols(test[,c("Gender","Driving_License","Vehicle_Insured","Vehicle_Age","Vehicle_Damage")])
+
+test_dum <- test_dum%>%
+  dplyr::select(-c(1:5)) #get rid of some columns
+
+test_data <- cbind(test[,c("Age","Annual_Premium","Vintage")],test_dum)
+
+```
+
+```{r}
+train_data <- train_data%>%
+  mutate(Response=ifelse(Response=="0","NOInterest","Interest"))%>%
+  mutate(Response=as.factor(Response))
+
+summary(train_data$Response) # we have a very imbalanced data set, around 14% of the customers are interested, around 86% of the customers are NOT interested.
+
+set.seed(12345)
+#for this project we only use 50000 subset to build the model
+train_subset <- train_data[1:50000,]  # this train_subset would be imbalanced as well
+#we use the other 20000 subset for validation set 
+test_subset <- train_data[50001:70000,]
+```
+
+
+#We need to build a model to predict whether customers are interested in the vehicle insurance or not. And we will apply Logistic, Random Forest, XGBoost three models for the optimal results.  
+
+
+```{r}
+logTest <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicle_Insured + 
+               Vehicle_Age + Vehicle_Damage + Region_Code+Policy_Sales_Channel, data = train[1:50000,], 
+               family = binomial)  
+
+summary(logTest)
+
+exp(logTest$coefficients)
+```
+
+
+```{r}
+logTest_2 <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicle_Insured + 
+               Vehicle_Age + Vehicle_Damage, data = train, 
+               family = binomial)  
+
+summary(logTest_2)
+
+exp(logTest_2$coefficients)
+```
+
+As logTest(full model including all the variables)'s AIC (204896) is the lowest, we will choose logTest as our Logistic model
+
+```{r}
+###???
+log_preds <- predict(logTest, train[50001:70000,]) # Create predictions for random forest model
+
+# Convert predictions to classes, using 0.5
+log_pred_class <- rep("NOInterest", nrow(log_preds))
+log_pred_class[log_preds[,1] >= 0.5] <- "Interest"
+
+confusionMatrix(as.factor(log_pred_class), 
+                test_subset$Response, positive = "Interest") 
+```
+Random Forest
+```{r}
+library(randomForest)
+library(caret)
+
+library(DMwR) # load the SMOTE dealing with imbalanced data
+
+smote_data <- SMOTE(Response ~ ., # Set prediction formula
+train_subset, # Set dataset
+perc.over = 100) # Select oversampling for minority class
+summary(smote_data$Response)
+
+
+randomforest_mod <- randomForest(Response ~ ., # Set tree formula
+                       data = smote_data, # Set dataset
+                       ntree = 1000,
+                       ) # Set number of trees to use
+randomforest_mod
+```
+Lets look at the out-of-bag error for the model over the 500 trees:
+```{r}
+oob_error <- randomforest_mod$err.rate[,1] # Extract oob error
+plot_dat <- cbind.data.frame(rep(1:length(oob_error)), oob_error) # Create plot data
+names(plot_dat) <- c("trees", "oob_error") # Name plot data
+
+# Plot oob error
+g_1 <- ggplot(plot_dat, aes(x = trees, y = oob_error)) + # Set x as trees and y as error
+  geom_point(alpha = 0.3, color = "blue") + # Select geom point
+  theme_bw() + # Set theme
+  geom_smooth() + # Add smoothing line
+  theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid 
+  labs(x = "Number of Trees", title = "Error Rate v Number of Trees",
+       y = "Error Rate")  # Set labels
+g_1 # Print plot
+```
+The optimal number of trees are from 200 to 300 trees from the graph above, we will use 300 tress for tuning the model.
+
+```{r}
+randomforest_preds <- predict(randomforest_mod, test_subset, type = "prob") # Create predictions for random forest model
+
+# Convert predictions to classes, using 0.5
+randomforest_pred_class <- rep("NOInterest", nrow(randomforest_preds))
+randomforest_pred_class[randomforest_preds[,1] >= 0.5] <- "Interest"
+
+confusionMatrix(as.factor(randomforest_pred_class), 
+                test_subset$Response, positive = "Interest") 
+```
+For our original random forest model we have 67.98% accuracy and 94.70% sensitivity. We hope we can enhance accuracy rate and sensitivity rate by tuning the model. 
+
+This model predicts 67.98% accuracy for all correct predictions including true positive and true negative and predicts 94.70% sensitivity for actual interested customers are correctly predicted as interested
+
+Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
+
+##Tuning the randomforest model
+
+```{r}
+mtry_vals <- c(2, 4, 5, 7, 9, 11, 14)
+nodesize_vals <- c(1, 10, 15, 50, 100, 150, 200, 500, 1000)
+
+params <- expand.grid(mtry_vals, nodesize_vals)
+names(params) <- c("mtry", "nodesize")
+acc_vec <- rep(NA, nrow(params))
+sens_vec <- rep(NA, nrow(params))
+
+for(i in 1:nrow(params)){
+  rf_mod <- randomForest(Response ~., # Set tree formula
+                         data = smote_data, # Set dataset
+                         ntree = 300,
+                         nodesize = params$nodesize[i],
+                         mtry = params$mtry[i]) # Set number of trees to use
+  rf_preds <-rf_mod$predicted # Create predictions for bagging model
+  
+  t <- table(rf_preds,   smote_data$Response) # Create table
+  c <- confusionMatrix(t, positive = "Interest") # Produce confusion matrix
+  
+  acc_vec[i] <- c$overall[1]
+  sens_vec[i] <- c$byClass[1]
+}
+```
+
+```{r Visualise Tuning}
+res_db <- cbind.data.frame(params, acc_vec, sens_vec)
+res_db$mtry <- as.factor(res_db$mtry) # Convert tree number to factor for plotting
+res_db$nodesize <- as.factor(res_db$nodesize) # Convert node size to factor for plotting
+g_1 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = acc_vec)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$acc_vec), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Node Size", y = "mtry", fill = "OOB Accuracy") # Set labels
+g_1 # Generate plot
+
+
+g_2 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = sens_vec)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$sens_vec), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Node Size", y = "Mtry", fill = "OOB Sensitivity") # Set labels
+g_2 # Generate plot
+
+```
+
+```{r}
+res_db[which(res_db$nodesize == 1),]
+```
+```{r}
+res_db[which(res_db$mtry == 2),]
+```
+
+It looks like the best set of parameters for this tree are mtry 2 and node size 150.
+
+```{r}
+rf_mod_final <- randomForest(Response ~ ., # Set tree formula
+                       data = smote_data, # Set dataset
+                       ntree = 300,
+                       nodesize=150,
+                       mtry=2 
+                       ) # Set number of trees to use
+rf_mod_final
+
+rf_preds_final <- predict(rf_mod_final, test_subset, type = "prob") # Create predictions for random forest model
+
+# Convert predictions to classes, using 0.5
+rf_pred_class <- rep("NOInterest", nrow(rf_preds_final))
+rf_pred_class[rf_preds_final[,1] >= 0.5] <- "Interest"
+
+confusionMatrix(as.factor(rf_pred_class), 
+                test_subset$Response, positive = "Interest") 
+
+```
+###??? Accuracy is 66.54% and sensitivity is 95.67%
+
+XGBoost 
+
+```{r}
+library(xgboost)
+library(xgboostExplainer) # Load XGboost Explainer
+library(pROC) # Load proc
+library(SHAPforxgboost) # Load shap for XGBoost
+```
+
+
+```{r}
+smote_data_full <- SMOTE(Response ~ ., # Set prediction formula
+train_data, # Set dataset
+perc.over = 100) # Select oversampling for minority class
+summary(smote_data_full$Response)
+```
+
+
+```{r}
+dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), 
+                          label = as.numeric(smote_data$Response) - 1) 
+# I'd be careful about using magic numbers here:
+
+# Create test matrix
+dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
+                         label = as.numeric(test_subset$Response) - 1)
+
+```
+
+```{r Train xgboost}
+set.seed(111111)
+bst_initial <- xgboost(data = dtrain_ins, # Set training data
+               
+               nrounds = 100, # Set number of rounds
+               
+               verbose = 1, # 1 - Prints out fit
+                print_every_n = 20, # Prints out result every 20th iteration
+               
+               objective = "binary:logistic", # Set objective
+               eval_metric = "auc",
+               eval_metric = "error") # Set evaluation metric to use
+```
+
+```{r}
+ boost_preds_1_ins <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
+ 
+ pred_dat_ins <- cbind.data.frame(boost_preds_1_ins, test_subset$Response)
+
+ boost_pred_class_ins <- rep("NOInterest", length(boost_preds_1_ins))
+ boost_pred_class_ins[boost_preds_1_ins >= 0.5] <- "Interest"
+
+ confusionMatrix(as.factor(boost_pred_class_ins),
+                 test_subset$Response, positive = "Interest")
+
+#cutoff point is 0.5, we got accuracy is 27.48% and sensitivity is 16.71%
+```
+
+* Visualize and decide the optimal number of iterations for XGBoost. (2 marks)
+```{r}
+# Use xgb.cv to run cross-validation inside xgboost
+set.seed(111111)
+bst <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+               eta = 0.1, # Set learning rate
+              
+               nrounds = 1500, # Set number of rounds
+               early_stopping_rounds = 50, # Set number of rounds to stop at if there is no improvement
+               
+               verbose = 1, # 1 - Prints out fit
+               nthread = 1, # Set number of parallel threads
+               print_every_n = 20, # Prints out result every 20th iteration
+              
+               objective = "binary:logistic", # Set objective
+               eval_metric = "auc",  # auc means area under the curve
+               eval_metric = "error") # Set evaluation metric to use
+```
+```{r}
+ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
+  geom_point()+
+  geom_smooth()
+```
+
+Based on the graph and results, the optimal number of iterations is 402. We will set the number of iterations to 500
+
+Next, we will tune max depth values and min child values 
+
+```{r tune xgb params 1}
+# Be Careful - This can take a very long time to run
+max_depth_vals <- c(3, 5, 7, 10, 15) # Create vector of max depth values
+min_child_weight <- c(1,3,5,7, 10, 15) # Create vector of min child values
+
+# Expand grid of parameter values
+cv_params <- expand.grid(max_depth_vals, min_child_weight)
+names(cv_params) <- c("max_depth", "min_child_weight")
+# Create results vector
+auc_vec <- error_vec <- rep(NA, nrow(cv_params)) 
+# Loop through results
+for(i in 1:nrow(cv_params)){
+  set.seed(111111)
+  bst_tune <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth = cv_params$max_depth[i], # Set max depth
+              min_child_weight = cv_params$min_child_weight[i], # Set minimum number of samples in node to split
+             
+               
+              nrounds = 500, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc", # Set evaluation metric to use
+              eval_metric = "error") # Set evaluation metric to use
+  auc_vec[i] <- bst_tune$evaluation_log$test_auc_mean[bst_tune$best_ntreelimit]
+  error_vec[i] <- bst_tune$evaluation_log$test_error_mean[bst_tune$best_ntreelimit]
+  
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+We will now tune the subsample and colsample_by_tree parameters:
+
+```{r tune xgb samples}
+
+# Be Careful - This can take a very long time to run
+subsample <- c(0.6, 0.7, 0.8, 0.9, 1) # Create vector of subsample values
+colsample_by_tree <- c(0.6, 0.7, 0.8, 0.9, 1) # Create vector of col sample values
+
+# Expand grid of tuning parameters
+cv_params <- expand.grid(subsample, colsample_by_tree)
+names(cv_params) <- c("subsample", "colsample_by_tree")
+# Create vectors to store results
+auc_vec <- error_vec <- rep(NA, nrow(cv_params)) 
+# Loop through parameter values
+for(i in 1:nrow(cv_params)){
+  set.seed(111111)
+  bst_tune <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth = 7, # Set max depth
+              min_child_weight = 10, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample = cv_params$subsample[i], # Set proportion of training data to use in tree
+              colsample_bytree = cv_params$colsample_by_tree[i], # Set number of variables to use in each tree
+               
+              nrounds = 1100, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc", # Set evaluation metric to use
+              eval_metric = "error") # Set evaluation metric to use
+  auc_vec[i] <- bst_tune$evaluation_log$test_auc_mean[bst_tune$best_ntreelimit]
+  error_vec[i] <- bst_tune$evaluation_log$test_error_mean[bst_tune$best_ntreelimit]
+  
+}
+
+```
+
+We can now the visualize the result of tuning these parameters:
+
+```{r visualise tuning sample params}
+
+res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
+names(res_db)[3:4] <- c("auc", "error") 
+res_db$subsample <- as.factor(res_db$subsample) # Convert tree number to factor for plotting
+res_db$colsample_by_tree <- as.factor(res_db$colsample_by_tree) # Convert node size to factor for plotting
+g_4 <- ggplot(res_db, aes(y = colsample_by_tree, x = subsample, fill = auc)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$auc), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Subsample", y = "Column Sample by Tree", fill = "AUC") # Set labels
+g_4 # Generate plot
+
+
+g_5 <- ggplot(res_db, aes(y = colsample_by_tree, x = subsample, fill = error)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$error), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Subsample", y = "Column Sample by Tree", fill = "Error") # Set labels
+g_5 # Generate plot
+
+res_db
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+set.seed(12345)
+
+train <- train %>%
+  mutate(age_stratum=cut(Age,breaks=5)) #we use age as the strata 
+
+sample_mean <- function(x)
+{
+    sample <- train%>%
+        group_by(age_stratum)%>%
+        sample_frac(0.4) #the number of samples returned for each stratum will be proportional to the total                             number of observations in the population for each stratum
+    
+    mean(sample$Annual_Premium)
+        
+}
+
+sample_number <- 1:100
+
+mean_annual_premium <- map_dbl(sample_number,sample_mean)
+
+df <- tibble(sample_number, mean_annual_premium )
+
+ggplot(data = df, 
+       aes(x = sample_number, y = mean_annual_premium)) +
+    geom_point() +
+    geom_hline(yintercept = mean(train$Annual_Premium), 
+               color = "blue")
+```
+

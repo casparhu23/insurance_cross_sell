@@ -21,6 +21,6 @@ library(data.table)
 
 #bank <- fread('bank-full.csv')
 
-summary(bank)
+#summary(bank)
 ```
 
