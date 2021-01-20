@@ -7,7 +7,7 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, eval = FALSE}
 library(haven)
 library(data.table)
 library(tidyverse)
@@ -16,10 +16,10 @@ train <- fread("data/insurance_train.csv")
 test <- fread("data/insurance_test.csv")
 ```
 
-#### Executive Summary
+# Executive Summary
 
 
-#### Inference Analysis
+# Inference Analysis
 
 ## Data Exploration and Cleaning
 
@@ -100,7 +100,7 @@ chisq.test(train$Response, train$Vehicle_Age,  correct = FALSE)
 
 Since all p values are less than 0.01, we have up to 99% confidence that all four pairs of variables are associated. We can use assoc to see some directions of the association. 
 
-```{r}
+```{r,fig.width=8}
 train_factor <- train%>%
   dplyr::select(where(is.factor))
 
@@ -232,4 +232,785 @@ Bottom 2 regions:
 And it is surprised to see the bottom 2 regions also have similarities in annual premium and age too.
 There is only one price for annual premium for both regions. We can see more close match in age histogram.  
 
-#### Prediction Analysis (Machine Learning)
+# Prediction Analysis (Machine Learning)
+
+We will use random forest and xgboost to build model respectively and then we can determine which model is the best fit for the data, but we need to create some dummy variables for some factor variables.
+
+## Data Cleaning (Machine Learning purpose)
+
+```{r}
+library(fastDummies)
+
+train <- train%>%
+  mutate(Vehicle_Age=ifelse(Vehicle_Age=="< 1 Year","1",
+                            ifelse(Vehicle_Age=="1-2 Year","2","3")))
+#mark "< 1 Year" as 1, "1-2 Year" as 2, "> 2 Years" as 3
+                            
+train_dum <- dummy_cols(train[,c("Gender","Driving_License","Vehicle_Insured","Vehicle_Age","Vehicle_Damage")]) #make dummy variables 
+
+train_dum <- train_dum%>%
+  dplyr::select(-c(1:5)) #get rid of some columns
+
+train_data <- cbind(train[,c("Age","Annual_Premium","Vintage")],train_dum,train[,"Response"])
+# combine dummy data and normal data together
+```
+
+```{r}
+train_data <- train_data%>% #adjust response(dependent) variable into human friendly text
+  mutate(Response=ifelse(Response=="0","NOInterest","Interest"))%>%
+  mutate(Response=as.factor(Response))
+
+summary(train_data$Response) # we have a very imbalanced data set, around 14% of the customers are interested, around 86% of the customers are NOT interested. we can use SMOTE to deal with that later
+
+set.seed(12345)
+# for this project we only use 50000 subset to build the model
+train_subset <- train_data[1:50000,]  # this train_subset would be imbalanced as well
+
+test_subset <- train_data[50001:70000,] # we use the other 20000 subset for validation set 
+```
+
+## Random Forest
+```{r}
+library(randomForest)
+library(caret)
+
+library(DMwR) # load the SMOTE dealing with imbalanced data
+
+smote_data <- SMOTE(Response ~ ., # Set prediction formula
+train_subset, # Set dataset
+perc.over = 100) # Select oversampling for minority class
+summary(smote_data$Response) # check if the proportion of the response variable is the same
+
+randomforest_mod <- randomForest(Response ~ ., # Set tree formula
+                       data = smote_data, # Set dataset
+                       ntree = 1000,
+                       ) # Set number of trees to use
+randomforest_mod
+```
+
+Lets look at the out-of-bag error for the model over the 1000 trees:
+```{r}
+oob_error <- randomforest_mod$err.rate[,1] # Extract oob error
+plot_dat <- cbind.data.frame(rep(1:length(oob_error)), oob_error) # Create plot data
+names(plot_dat) <- c("trees", "oob_error") # Name plot data
+
+# Plot oob error
+g_1 <- ggplot(plot_dat, aes(x = trees, y = oob_error)) + # Set x as trees and y as error
+  geom_point(alpha = 0.3, color = "blue") + # Select geom point
+  theme_bw() + # Set theme
+  geom_smooth() + # Add smoothing line
+  theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid 
+  labs(x = "Number of Trees", title = "Error Rate v Number of Trees",
+       y = "Error Rate")  # Set labels
+g_1 # Print plot
+```
+The optimal number of trees are from 700 to 800 trees from the graph above, we will use 800 tress for tuning the model.
+
+```{r}
+set.seed(111111)
+randomforest_preds <- predict(randomforest_mod, test_subset, type = "prob") # Create predictions for random forest model
+
+# Convert predictions to classes, using 0.5
+randomforest_pred_class <- rep("NOInterest", nrow(randomforest_preds))
+randomforest_pred_class[randomforest_preds[,1] >= 0.5] <- "Interest"
+
+confusionMatrix(as.factor(randomforest_pred_class), 
+                test_subset$Response, positive = "Interest") 
+```
+
+For our original random forest model we have 68.32% accuracy and 94.09% sensitivity. We hope we can enhance accuracy rate and sensitivity rate by tuning the model. 
+
+This model predicts 68.32% accuracy for all correct predictions including true positive and true negative and predicts 94.09% sensitivity for actual interested customers are correctly predicted as interested
+
+Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
+
+```{r}
+#start parallel processing to make machine learning much more efficiently (reduce running time)
+library(doParallel)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+```
+
+### Tuning the randomforest model
+
+```{r}
+mtry_vals <- c(2, 4, 5, 7, 9, 11, 14) # last parameter is 14 because we only have 14 independent variables
+nodesize_vals <- c(1, 10, 15, 50, 100, 150, 200, 500, 1000)
+
+params <- expand.grid(mtry_vals, nodesize_vals) # make a table for two parameters 
+names(params) <- c("mtry", "nodesize") # set up column names for the table we just created
+acc_vec <- rep(NA, nrow(params)) # set up acc_vec output variable
+sens_vec <- rep(NA, nrow(params)) # set up sens_vec output variable
+
+for(i in 1:nrow(params)){
+  rf_mod <- randomForest(Response ~., # Set tree formula
+                         data = smote_data, # Set dataset
+                         ntree = 800,
+                         nodesize = params$nodesize[i],
+                         mtry = params$mtry[i]) # Set number of trees to use
+  rf_preds <-rf_mod$predicted # Create predictions for bagging model
+  
+  t <- table(rf_preds,   smote_data$Response) # Create table
+  c <- confusionMatrix(t, positive = "Interest") # Produce confusion matrix
+  
+  acc_vec[i] <- c$overall[1]   # loop the accuracy results into acc_vec
+  sens_vec[i] <- c$byClass[1]  # loop the sensitivity results into sens_vec
+}
+```
+
+```{r Visualise Tuning}
+res_db <- cbind.data.frame(params, acc_vec, sens_vec) #columns bind togther
+res_db$mtry <- as.factor(res_db$mtry) # Convert tree number to factor for plotting
+res_db$nodesize <- as.factor(res_db$nodesize) # Convert node size to factor for plotting
+g_1 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = acc_vec)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$acc_vec), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Node Size", y = "mtry", fill = "OOB Accuracy") # Set labels
+g_1 # Generate plot
+
+
+g_2 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = sens_vec)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$sens_vec), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Node Size", y = "Mtry", fill = "OOB Sensitivity") # Set labels
+g_2 # Generate plot
+
+```
+
+Since we cannot use one set of parameter to satisfy both accuracy and sensitivity, however 
+we want to predict the positive class corresponding to INTEREST customers, so we will focus on the highest sensitivity score on second graph (g_2). It looks like the best set of parameters for this tree are mtry 2 and node size 10.
+
+```{r}
+set.seed(111111)
+rf_mod_final <- randomForest(Response ~ ., # Set tree formula
+                       data = smote_data, # Set dataset
+                       ntree = 800,
+                       nodesize=10,
+                       mtry=2 
+                       ) # Set number of trees to use
+rf_mod_final # final random forest model
+
+rf_preds_final <- predict(rf_mod_final, test_subset, type = "prob") # Create predictions for random forest model
+
+# Convert predictions to classes, using 0.5
+rf_pred_class <- rep("NOInterest", nrow(rf_preds_final))
+rf_pred_class[rf_preds_final[,1] >= 0.5] <- "Interest"
+
+confusionMatrix(as.factor(rf_pred_class), 
+                test_subset$Response, positive = "Interest") 
+```
+
+From the confusion matrix, we got better sensitivity 94.78%, which was a little bit higher than the naive random forest model. And it is reasonable that accuracy is 67.81% since we did not choose the parameter that were the best for enhancing accuracy score. Let's keep those scores in mind and we will use XGBoost to build the model to see how it will go. 
+
+## XGBoost 
+
+```{r}
+library(xgboost) # load XGBoost
+library(xgboostExplainer) # Load XGboost Explainer
+library(pROC) # Load proc
+library(SHAPforxgboost) # Load shap for XGBoost
+```
+
+Prepare for train and test matrix for XGBoost model
+```{r}
+#create train matrix
+dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), 
+                          label = as.numeric(smote_data$Response) - 1) 
+# Create test matrix
+dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
+                         label = as.numeric(test_subset$Response) - 1)
+```
+
+```{r Train xgboost}
+set.seed(111111)
+bst_initial <- xgboost(data = dtrain_ins, # Set training data
+               
+               nrounds = 100, # Set number of rounds
+               
+               verbose = 1, # 1 - Prints out fit
+                print_every_n = 20, # Prints out result every 20th iteration
+               
+               objective = "binary:logistic", # Set objective
+               eval_metric = "auc",
+               eval_metric = "error") # Set evaluation metric to use
+```
+
+Instead of using 0.5 as cut off point, we will use `OptimalCutpoints` package to decide which is the best optimal points for our confusion matrix
+```{r xbgoost predictions}
+library(OptimalCutpoints) # load package for setting up optimal points
+boost_preds <- predict(bst_initial, dtrain_ins) # Create predictions for xgboost model (dtrain_ins)
+# Join predictions and actual
+pred_dat <- cbind.data.frame(boost_preds, as.numeric(smote_data$Response)-1)
+names(pred_dat) <- c("predictions", "response")
+
+# use train train to determine the best optimal cut point
+oc<- optimal.cutpoints(X = "predictions",   
+                       status = "response",
+                       tag.healthy = 0,
+                       data = pred_dat,
+                       methods = "MaxEfficiency")
+
+boost_preds_1 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model (dtest_ins)
+
+pred_dat <- cbind.data.frame(boost_preds_1 , as.numeric(test_subset$Response)-1)
+# Convert predictions to classes, using optimal cut-off
+boost_pred_class <- rep(0, length(boost_preds_1))  #create one column of 0 
+boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+# replace those larger than cut off point as 1
+
+t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
+confusionMatrix(t, positive = "1") # Produce confusion matrix
+```
+For our original XGBoost model we have 77% accuracy and 78.88% sensitivity. We hope we can enhance accuracy rate and sensitivity rate by tuning the model. 
+
+This model predicts 77% accuracy for all correct predictions including true positive and true negative and predicts 78.88% sensitivity for actual interested customers are correctly predicted as interested
+
+Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
+
+As you may have the question, why not use 0.5 as cut point? I did try with 0.5 as cut point with very low accuracy and sensitivity. Thus we will keep use optimal cut point for later process. 
+
+```{r}
+ boost_preds_1_ins05 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
+
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$Response)
+
+ boost_pred_class_ins05 <- rep("NOInterest", length(boost_preds_1_ins05))
+ boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- "Interest"
+
+ confusionMatrix(as.factor(boost_pred_class_ins05),
+                 test_subset$Response, positive = "Interest")
+
+# when cutoff point is 0.5, we got very low accuracy and sensitivity rate 
+```
+
+Visualize and decide the optimal number of iterations for XGBoost
+```{r}
+# Use xgb.cv to run cross-validation inside xgboost
+set.seed(111111)
+bst <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+               eta = 0.1, # Set learning rate
+              
+               nrounds = 1500, # Set number of rounds
+               early_stopping_rounds = 50, # Set number of rounds to stop at if there is no improvement
+               
+               verbose = 1, # 1 - Prints out fit
+               nthread = 1, # Set number of parallel threads
+               print_every_n = 20, # Prints out result every 20th iteration
+              
+               objective = "binary:logistic", # Set objective
+               eval_metric = "auc",  # auc means area under the curve
+               eval_metric = "error") # Set evaluation metric to use
+```
+
+We can plot the results with ggplot:
+```{r}
+ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
+  geom_point()+
+  geom_smooth()
+```
+Based on the graph and results, the optimal number of iterations is 402. We will set the number of iterations to 500
+
+Next, we will tune `max depth values` and `min child values` 
+```{r tune xgb params 1}
+max_depth_vals <- c(3, 5, 7, 10, 15) # Create vector of max depth values
+min_child_weight <- c(1,3,5,7, 10, 15) # Create vector of min child values
+
+# Expand grid of parameter values
+cv_params <- expand.grid(max_depth_vals, min_child_weight)
+names(cv_params) <- c("max_depth", "min_child_weight")
+# Create results vector
+auc_vec <- error_vec <- rep(NA, nrow(cv_params)) 
+# Loop through results
+for(i in 1:nrow(cv_params)){
+  set.seed(111111)
+  bst_tune <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth = cv_params$max_depth[i], # Set max depth
+              min_child_weight = cv_params$min_child_weight[i], # Set minimum number of samples in node to split
+             
+               
+              nrounds = 500, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc", # Set evaluation metric to use
+              eval_metric = "error") # Set evaluation metric to use
+  auc_vec[i] <- bst_tune$evaluation_log$test_auc_mean[bst_tune$best_ntreelimit]
+  error_vec[i] <- bst_tune$evaluation_log$test_error_mean[bst_tune$best_ntreelimit]
+  
+}
+```
+We can now the visualize the result of tuning these parameters:
+
+```{r Visualise Tune 1}
+# Join results in dataset
+res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
+names(res_db)[3:4] <- c("auc", "error") 
+res_db$max_depth <- as.factor(res_db$max_depth) # Convert tree number to factor for plotting
+res_db$min_child_weight <- as.factor(res_db$min_child_weight) # Convert node size to factor for plotting
+# Print AUC heatmap
+g_2 <- ggplot(res_db, aes(y = max_depth, x = min_child_weight, fill = auc)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$auc), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Minimum Child Weight", y = "Max Depth", fill = "AUC") # Set labels
+g_2 # Generate plot
+
+# print error heatmap
+g_3 <- ggplot(res_db, aes(y = max_depth, x = min_child_weight, fill = error)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$error), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Minimum Child Weight", y = "Max Depth", fill = "Error") # Set labels
+g_3 # Generate plot
+```
+
+Very low max depth values (1) perform poorly as the interactions in this dataset involve multiple variables. The level of interactions is controlled by the depth of the tree, it seems that high value of interaction depth (15) works the best.
+
+Extreme high values of min child weight and appear to perform poorly, it is better for model to focus on small differences between samples.
+
+Here we see that we have more optimal results for both highest accuracy rate (auc_vec) and lowest error rate when setting `max depth` to 15, and a `minimum child weight` to 1.
+
+Next lets tune `gamma`, the minimum loss reduction necessary to make a further partition in a node.
+
+```{r gamma tuning}
+gamma_vals <- c(0, 0.05, 0.1, 0.15, 0.2) # Create vector of gamma values
+
+# Be Careful - This can take a very long time to run
+set.seed(111111)
+auc_vec <- error_vec <- rep(NA, length(gamma_vals))
+for(i in 1:length(gamma_vals)){
+  bst_tune <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = gamma_vals[i], # Set minimum loss reduction for split
+
+              
+               
+              nrounds = 500, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc", # Set evaluation metric to use
+              eval_metric = "error") # Set evaluation metric to use
+  auc_vec[i] <- bst_tune$evaluation_log$test_auc_mean[bst_tune$best_ntreelimit]
+  error_vec[i] <- bst_tune$evaluation_log$test_error_mean[bst_tune$best_ntreelimit]
+  
+}
+```
+Lets view our results to identify the value of `gamma` to use:
+
+```{r Gamma res}
+# Join gamma to values
+cbind.data.frame(gamma_vals, auc_vec, error_vec)
+```
+
+It seems that a `gamma` value of 0 gives us the highest accuracy rate (auc_vec) and lowest error rate.
+Before we proceed lets re-calibrate the number of rounds to use for an optimal model here:
+
+```{r choose xgboost tree number 2}
+# Use xgb.cv to run cross-validation inside xgboost
+set.seed(111111)
+bst <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+             
+               
+              nrounds = 1000, # Set number of rounds
+              early_stopping_rounds = 50, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+```
+
+From the result we see the optimal number of trees to use with our current set of parameters is 300 so we are still fitting an appropriate number of trees. We will change number of trees to 450 instead of 500.
+
+We will now tune the `subsample` and `colsample_by_tree` parameters:
+
+```{r tune xgb samples}
+subsample <- c(0.6, 0.7, 0.8, 0.9, 1) # Create vector of subsample values
+colsample_by_tree <- c(0.6, 0.7, 0.8, 0.9, 1) # Create vector of col sample values
+
+# Expand grid of tuning parameters
+cv_params <- expand.grid(subsample, colsample_by_tree)
+names(cv_params) <- c("subsample", "colsample_by_tree")
+# Create vectors to store results
+auc_vec <- error_vec <- rep(NA, nrow(cv_params)) 
+# Loop through parameter values
+for(i in 1:nrow(cv_params)){
+  set.seed(111111)
+  bst_tune <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample = cv_params$subsample[i], # Set proportion of training data to use in tree
+              colsample_bytree = cv_params$colsample_by_tree[i], # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc", # Set evaluation metric to use
+              eval_metric = "error") # Set evaluation metric to use
+  auc_vec[i] <- bst_tune$evaluation_log$test_auc_mean[bst_tune$best_ntreelimit]
+  error_vec[i] <- bst_tune$evaluation_log$test_error_mean[bst_tune$best_ntreelimit]
+  
+}
+
+```
+We can now the visualize the result of tuning these parameters:
+
+```{r visualise tuning sample params}
+
+res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
+names(res_db)[3:4] <- c("auc", "error") 
+res_db$subsample <- as.factor(res_db$subsample) # Convert tree number to factor for plotting
+res_db$colsample_by_tree <- as.factor(res_db$colsample_by_tree) # Convert node size to factor for plotting
+g_4 <- ggplot(res_db, aes(y = colsample_by_tree, x = subsample, fill = auc)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$auc), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Subsample", y = "Column Sample by Tree", fill = "AUC") # Set labels
+g_4 # Generate plot
+
+
+g_5 <- ggplot(res_db, aes(y = colsample_by_tree, x = subsample, fill = error)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$error), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Subsample", y = "Column Sample by Tree", fill = "Error") # Set labels
+g_5 # Generate plot
+
+res_db
+```
+
+It seems that the optimal values of the parameters are a subsample parameter of 0.9 and a column sample by tree parameter of 0.7. This shows us that the model performs better when more of the samples are included.
+We will use `subsample parameter of 0.9` and a `column sample by tree parameter of 0.7` for our model.
+
+The final step in our tuning process is to lower the learning rate `eta` and add more trees, lets try a couple of different eta values here:
+
+```{r eta tuning}
+
+# Use xgb.cv to run cross-validation inside xgboost
+set.seed(111111)
+bst_mod_1 <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.3, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample = 0.9, # Set proportion of training data to use in tree
+              colsample_bytree =  0.7, # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+              
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+
+
+set.seed(111111)
+bst_mod_2 <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.1, # Set learning rate
+              max.depth =  15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample = 0.9 , # Set proportion of training data to use in tree
+              colsample_bytree = 0.7, # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+              
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+
+set.seed(111111)
+bst_mod_3 <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.05, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1 , # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample = 0.9 , # Set proportion of training data to use in tree
+              colsample_bytree =  0.7, # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+              
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+set.seed(111111)
+bst_mod_4 <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.01, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0.1, # Set minimum loss reduction for split
+              subsample = 0.9 , # Set proportion of training data to use in tree
+              colsample_bytree = 0.7, # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+              
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+
+set.seed(111111)
+bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
+              
+              nfold = 5, # Use 5 fold cross-validation
+               
+              eta = 0.005, # Set learning rate
+              max.depth = 15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample = 0.9 , # Set proportion of training data to use in tree
+              colsample_bytree = 0.7, # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+               
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+```
+
+We can then plot the error rate over different learning rates:
+
+```{r eta plots}
+# Extract results for model with eta = 0.3
+pd1 <- cbind.data.frame(bst_mod_1$evaluation_log[,c("iter", "test_error_mean")], rep(0.3, nrow(bst_mod_1$evaluation_log)))
+names(pd1)[3] <- "eta"
+# Extract results for model with eta = 0.1
+pd2 <- cbind.data.frame(bst_mod_2$evaluation_log[,c("iter", "test_error_mean")], rep(0.1, nrow(bst_mod_2$evaluation_log)))
+names(pd2)[3] <- "eta"
+# Extract results for model with eta = 0.05
+pd3 <- cbind.data.frame(bst_mod_3$evaluation_log[,c("iter", "test_error_mean")], rep(0.05, nrow(bst_mod_3$evaluation_log)))
+names(pd3)[3] <- "eta"
+# Extract results for model with eta = 0.01
+pd4 <- cbind.data.frame(bst_mod_4$evaluation_log[,c("iter", "test_error_mean")], rep(0.01, nrow(bst_mod_4$evaluation_log)))
+names(pd4)[3] <- "eta"
+# Extract results for model with eta = 0.005
+pd5 <- cbind.data.frame(bst_mod_5$evaluation_log[,c("iter", "test_error_mean")], rep(0.005, nrow(bst_mod_5$evaluation_log)))
+names(pd5)[3] <- "eta"
+# Join datasets
+plot_data <- rbind.data.frame(pd1, pd2, pd3, pd4, pd5)
+# Converty ETA to factor
+plot_data$eta <- as.factor(plot_data$eta)
+# Plot points
+g_6 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
+  geom_point(alpha = 0.5) +
+  theme_bw() + # Set theme
+  theme(panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid 
+  labs(x = "Number of Trees", title = "Error Rate v Number of Trees",
+       y = "Error Rate", color = "Learning \n Rate")  # Set labels
+g_6
+
+# Plot lines
+g_7 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
+  geom_smooth(alpha = 0.5) +
+  theme_bw() + # Set theme
+  theme(panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid 
+  labs(x = "Number of Trees", title = "Error Rate v Number of Trees",
+       y = "Error Rate", color = "Learning \n Rate")  # Set labels
+g_7
+
+```
+
+From this it looks like an eta value of 0.05 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
+
+```{r fit final xgb model}
+set.seed(111111)
+bst_final <- xgboost(data = dtrain_ins, # Set training data
+              eta = 0.05, # Set learning rate
+              max.depth =  15, # Set max depth
+              min_child_weight = 1, # Set minimum number of samples in node to split
+              gamma = 0, # Set minimum loss reduction for split
+              subsample =  0.9, # Set proportion of training data to use in tree
+              colsample_bytree = 0.7, # Set number of variables to use in each tree
+               
+              nrounds = 450, # Set number of rounds
+              early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+               
+              verbose = 1, # 1 - Prints out fit
+              nthread = 1, # Set number of parallel threads
+              print_every_n = 20, # Prints out result every 20th iteration
+              
+              objective = "binary:logistic", # Set objective
+              eval_metric = "auc",
+              eval_metric = "error") # Set evaluation metric to use
+```
+
+```{r final xgb_preds}
+boost_preds <- predict(bst_final, dtrain_ins) # Create predictions for XGBoost model on training data
+
+pred_dat <- cbind.data.frame(boost_preds, as.numeric(smote_data$Response)-1)
+names(pred_dat) <- c("predictions", "response")
+oc<- optimal.cutpoints(X = "predictions",
+                       status = "response",
+                       tag.healthy = 0,
+                       data = pred_dat,
+                       methods = "MaxEfficiency")
+
+boost_preds <- predict(bst_final, dtest_ins) # Create predictions for XGBoost model
+
+pred_dat <- cbind.data.frame(boost_preds , as.numeric(test_subset$Response)-1)
+# Convert predictions to classes, using optimal cut-off
+boost_pred_class <- rep(0, length(boost_preds))
+boost_pred_class[boost_preds >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+
+
+t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
+confusionMatrix(t, positive = "1") # Produce confusion matrix
+```
+
+As you may recall that our original XGBoost model's accuracy is 77% and sensitivity is 78.88%, but now we have 75.7% and 76.92% for accuracy and sensitivity. The slight decreasing percentages on both stats show us that sometimes the orginal XGBoost setting works for the best. That also concludes why programmers who created XGBoost model set those initial parameters as the standard.  
+
+The winner of two models will be random forest based on the nearly 15% gap between the sensitivity score.
+
+### Variable Importance with XGBoost 
+
+We can extract importance measures from XGBoost:
+
+```{r XGBoost Importance}
+library(xgboostExplainer) # Load XGboost Explainer
+
+# Extract importance
+imp_mat <- xgb.importance(model = bst_final)
+# Plot importance (top 10 variables)
+xgb.plot.importance(imp_mat, top_n = 10)
+```
+
+### Compare methods
+
+We can compare different models by plotting their auc curves. For this we will compare our first model against our final balanced model. 
+
+```{r compare auc}
+library(pROC) 
+# Calculate first model ROC
+roc_1 = roc(test_subset$Response, boost_preds_1) # naive model
+# Calculate final model ROC
+roc_2 = roc(test_subset$Response, boost_preds) # final model
+# Print initial model AUC
+plot.roc(roc_1, print.auc = TRUE, col = "red", print.auc.col = "red")
+# Print final model AUC
+plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue", print.auc.col = "blue", add = TRUE)
+```
