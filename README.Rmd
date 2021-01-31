@@ -520,7 +520,7 @@ bst <- xgb.cv(data = dtrain_ins, # Set training data
                nrounds = 1500, # Set number of rounds
                early_stopping_rounds = 50, # Set number of rounds to stop at if there is no improvement
                
-               verbose = 1, # 1 - Prints out fit
+               verbose = 0, # stay silent not printing
                nthread = 1, # Set number of parallel threads
                print_every_n = 20, # Prints out result every 20th iteration
               
@@ -562,7 +562,7 @@ for(i in 1:nrow(cv_params)){
               nrounds = 500, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
                
@@ -642,7 +642,7 @@ for(i in 1:length(gamma_vals)){
               nrounds = 500, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
                
@@ -680,7 +680,7 @@ bst <- xgb.cv(data = dtrain_ins, # Set training data
               nrounds = 1000, # Set number of rounds
               early_stopping_rounds = 50, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
                
@@ -719,7 +719,7 @@ for(i in 1:nrow(cv_params)){
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
                
@@ -795,7 +795,7 @@ bst_mod_1 <- xgb.cv(data = dtrain_ins, # Set training data
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
               
@@ -819,7 +819,7 @@ bst_mod_2 <- xgb.cv(data = dtrain_ins, # Set training data
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
               
@@ -842,7 +842,7 @@ bst_mod_3 <- xgb.cv(data = dtrain_ins, # Set training data
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
               
@@ -864,7 +864,7 @@ bst_mod_4 <- xgb.cv(data = dtrain_ins, # Set training data
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
               
@@ -887,7 +887,7 @@ bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
                
@@ -955,7 +955,7 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
               nrounds = 450, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
-              verbose = 1, # 1 - Prints out fit
+              verbose = 0, # stay silent not printing
               nthread = 1, # Set number of parallel threads
               print_every_n = 20, # Prints out result every 20th iteration
               
