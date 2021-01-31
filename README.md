@@ -53,7 +53,7 @@ of sensitivity score that is almost 15% lower than random forest model
 performed. Furthermore, I think this modeling shows us sometimes the
 orginal XGBoost setting works for the best. That also concludes why
 programmers who created XGBoost model set those initial parameters as
-the standard. However, XGBoost still generated AUC for 0.82. As we know
+the standard. However, XGBoost still generated AUC for 0.83. As we know
 higher AUC can have better performance on differentiating positive and
 negative classes. Therefore, we still think XGBoost model is not the
 worst model but not as well as random forest especially for this data
@@ -117,10 +117,6 @@ colnames(train) # check column names for the dataset
     ##  [7] "Vehicle_Age"          "Vehicle_Damage"       "Annual_Premium"      
     ## [10] "Policy_Sales_Channel" "Vintage"              "Response"
 
-``` r
-library(scales)
-```
-
     ## 
     ## Attaching package: 'scales'
 
@@ -132,36 +128,7 @@ library(scales)
     ## 
     ##     col_factor
 
-``` r
-ggplot(train, aes(x=Annual_Premium)) + 
-  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
-  theme_bw() + # Set theme for plot
-  theme(panel.grid.major = element_blank(), # Turn of the background grid
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) +
-  scale_x_continuous(labels=comma)+
-  scale_y_continuous(labels=comma)+
-  labs(x = "Annual Premium", # Set plot labels
-       title = "Density plot of Annual Premium")
-```
-
-![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
-
-``` r
-ggplot(train, aes(x=Age)) + 
-  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
-  theme_bw() + # Set theme for plot
-  theme(panel.grid.major = element_blank(), # Turn of the background grid
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) +
-  scale_y_continuous(labels=comma)+
-  labs(x = "Age", # Set plot labels
-       title = "Density plot of Age")
-```
-
-![](README_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
 
 ``` r
 train <- train%>%
@@ -181,28 +148,12 @@ train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Y
 
 ## Correlation between Numeric Variables
 
-``` r
-train_numeric <- train%>%
-  dplyr::select(where(is.numeric))
-
-cor(train_numeric)
-```
-
     ##                         Age Annual_Premium       Vintage
     ## Age             1.000000000   0.0675070016 -0.0012640787
     ## Annual_Premium  0.067507002   1.0000000000 -0.0006084172
     ## Vintage        -0.001264079  -0.0006084172  1.0000000000
 
-``` r
-library(corrplot)
-```
-
     ## corrplot 0.84 loaded
-
-``` r
-L <- cor(train_numeric)  # make correlation matrix
-corrplot(L, type="lower")  # make correlation plot
-```
 
 ![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
@@ -254,46 +205,9 @@ Since all p values are less than 0.01, we have up to 99% confidence that
 all four pairs of variables are associated. We can use assoc to see some
 directions of the association.
 
-``` r
-train_factor <- train%>%
-  dplyr::select(where(is.factor))
-
-library(vcd)
-```
-
     ## Loading required package: grid
 
-``` r
-train_factor%>%
-  dplyr::select(Response,Driving_License)%>%
-  assoc(shade=TRUE)
-```
-
-![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
-
-``` r
-train_factor%>%
-  dplyr::select(Response, Vehicle_Damage)%>%
-  assoc(shade=TRUE)
-```
-
-![](README_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
-
-``` r
-train_factor%>%
-  dplyr::select(Response,Vehicle_Insured)%>%
-  assoc(shade=TRUE)
-```
-
-![](README_files/figure-gfm/unnamed-chunk-7-3.png)<!-- -->
-
-``` r
-train_factor%>%
-  dplyr::select(Response,Vehicle_Age)%>%
-  assoc(shade=TRUE)
-```
-
-![](README_files/figure-gfm/unnamed-chunk-7-4.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-7-3.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-7-4.png)<!-- -->
 
 We can see customers without a driving license, they are way much less
 likely to be interested in vehicle insurance, which totally makes sense.
@@ -589,7 +503,7 @@ summary(riModP)
 library(sjPlot)
 ```
 
-    ## #refugeeswelcome
+    ## Learn more about sjPlot with 'browseVignettes("sjPlot")'.
 
 ``` r
 plot_model(riMod, type = "re") + 
@@ -654,17 +568,6 @@ region31 <- train[Region_Code=="31",] # extract region 31
 region48 <- train[Region_Code=="48",]  #extract region 48
 ```
 
-``` r
-top_2_region <- rbind(region28,region8)
-bottom_2_region <- rbind(region31,region48)
-
-ggplot(data=top_2_region,aes(x=Annual_Premium,fill=Region_Code))+
-  geom_histogram(alpha=0.5)+
-  scale_x_continuous(labels = comma,lim=c(0,100000))+
-  scale_y_continuous(labels = comma)+
-  theme_minimal()
-```
-
     ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
     ## Warning: Removed 588 rows containing non-finite values (stat_bin).
@@ -673,35 +576,15 @@ ggplot(data=top_2_region,aes(x=Annual_Premium,fill=Region_Code))+
 
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
-``` r
-ggplot(data=top_2_region,aes(x=Age,fill=Region_Code))+
-  geom_histogram(alpha=0.5)+
-  theme_minimal()
-```
-
     ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
 ![](README_files/figure-gfm/unnamed-chunk-15-2.png)<!-- -->
-
-``` r
-ggplot(data=bottom_2_region,aes(x=Annual_Premium,fill=Region_Code))+
-  geom_histogram(alpha=0.5)+
-  scale_x_continuous(labels = comma,lim=c(2500,2700))+
-  scale_y_continuous(labels = comma)+
-  theme_minimal()
-```
 
     ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
     ## Warning: Removed 14 rows containing non-finite values (stat_bin).
 
 ![](README_files/figure-gfm/unnamed-chunk-15-3.png)<!-- -->
-
-``` r
-ggplot(data=bottom_2_region,aes(x=Age,fill=Region_Code))+
-  geom_histogram(alpha=0.5)+
-  theme_minimal()
-```
 
     ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
@@ -1846,48 +1729,7 @@ for(i in 1:nrow(cv_params)){
 
 We can now the visualize the result of tuning these parameters:
 
-``` r
-# Join results in dataset
-res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
-names(res_db)[3:4] <- c("auc", "error") 
-res_db$max_depth <- as.factor(res_db$max_depth) # Convert tree number to factor for plotting
-res_db$min_child_weight <- as.factor(res_db$min_child_weight) # Convert node size to factor for plotting
-# Print AUC heatmap
-g_2 <- ggplot(res_db, aes(y = max_depth, x = min_child_weight, fill = auc)) + # set aesthetics
-  geom_tile() + # Use geom_tile for heatmap
-  theme_bw() + # Set theme
-  scale_fill_gradient2(low = "blue", # Choose low color
-    mid = "white", # Choose mid color
-    high = "red", # Choose high color
-    midpoint =mean(res_db$auc), # Choose mid point
-    space = "Lab", 
-    na.value ="grey", # Choose NA value
-    guide = "colourbar", # Set color bar
-    aesthetics = "fill") + # Select aesthetics to apply
-  labs(x = "Minimum Child Weight", y = "Max Depth", fill = "AUC") # Set labels
-g_2 # Generate plot
-```
-
-![](README_files/figure-gfm/Visualise%20Tune%201-1.png)<!-- -->
-
-``` r
-# print error heatmap
-g_3 <- ggplot(res_db, aes(y = max_depth, x = min_child_weight, fill = error)) + # set aesthetics
-  geom_tile() + # Use geom_tile for heatmap
-  theme_bw() + # Set theme
-  scale_fill_gradient2(low = "blue", # Choose low color
-    mid = "white", # Choose mid color
-    high = "red", # Choose high color
-    midpoint =mean(res_db$error), # Choose mid point
-    space = "Lab", 
-    na.value ="grey", # Choose NA value
-    guide = "colourbar", # Set color bar
-    aesthetics = "fill") + # Select aesthetics to apply
-  labs(x = "Minimum Child Weight", y = "Max Depth", fill = "Error") # Set labels
-g_3 # Generate plot
-```
-
-![](README_files/figure-gfm/Visualise%20Tune%201-2.png)<!-- -->
+![](README_files/figure-gfm/Visualise%20Tune%201-1.png)<!-- -->![](README_files/figure-gfm/Visualise%20Tune%201-2.png)<!-- -->
 
 Very low max depth values (1) perform poorly as the interactions in this
 dataset involve multiple variables. The level of interactions is
@@ -2507,49 +2349,7 @@ for(i in 1:nrow(cv_params)){
 
 We can now the visualize the result of tuning these parameters:
 
-``` r
-res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
-names(res_db)[3:4] <- c("auc", "error") 
-res_db$subsample <- as.factor(res_db$subsample) # Convert tree number to factor for plotting
-res_db$colsample_by_tree <- as.factor(res_db$colsample_by_tree) # Convert node size to factor for plotting
-g_4 <- ggplot(res_db, aes(y = colsample_by_tree, x = subsample, fill = auc)) + # set aesthetics
-  geom_tile() + # Use geom_tile for heatmap
-  theme_bw() + # Set theme
-  scale_fill_gradient2(low = "blue", # Choose low color
-    mid = "white", # Choose mid color
-    high = "red", # Choose high color
-    midpoint =mean(res_db$auc), # Choose mid point
-    space = "Lab", 
-    na.value ="grey", # Choose NA value
-    guide = "colourbar", # Set color bar
-    aesthetics = "fill") + # Select aesthetics to apply
-  labs(x = "Subsample", y = "Column Sample by Tree", fill = "AUC") # Set labels
-g_4 # Generate plot
-```
-
-![](README_files/figure-gfm/visualise%20tuning%20sample%20params-1.png)<!-- -->
-
-``` r
-g_5 <- ggplot(res_db, aes(y = colsample_by_tree, x = subsample, fill = error)) + # set aesthetics
-  geom_tile() + # Use geom_tile for heatmap
-  theme_bw() + # Set theme
-  scale_fill_gradient2(low = "blue", # Choose low color
-    mid = "white", # Choose mid color
-    high = "red", # Choose high color
-    midpoint =mean(res_db$error), # Choose mid point
-    space = "Lab", 
-    na.value ="grey", # Choose NA value
-    guide = "colourbar", # Set color bar
-    aesthetics = "fill") + # Select aesthetics to apply
-  labs(x = "Subsample", y = "Column Sample by Tree", fill = "Error") # Set labels
-g_5 # Generate plot
-```
-
-![](README_files/figure-gfm/visualise%20tuning%20sample%20params-2.png)<!-- -->
-
-``` r
-res_db
-```
+![](README_files/figure-gfm/visualise%20tuning%20sample%20params-1.png)<!-- -->![](README_files/figure-gfm/visualise%20tuning%20sample%20params-2.png)<!-- -->
 
     ##    subsample colsample_by_tree       auc     error
     ## 1        0.6               0.6 0.9075878 0.1739870
@@ -2780,50 +2580,7 @@ bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
 
 We can then plot the error rate over different learning rates:
 
-``` r
-# Extract results for model with eta = 0.3
-pd1 <- cbind.data.frame(bst_mod_1$evaluation_log[,c("iter", "test_error_mean")], rep(0.3, nrow(bst_mod_1$evaluation_log)))
-names(pd1)[3] <- "eta"
-# Extract results for model with eta = 0.1
-pd2 <- cbind.data.frame(bst_mod_2$evaluation_log[,c("iter", "test_error_mean")], rep(0.1, nrow(bst_mod_2$evaluation_log)))
-names(pd2)[3] <- "eta"
-# Extract results for model with eta = 0.05
-pd3 <- cbind.data.frame(bst_mod_3$evaluation_log[,c("iter", "test_error_mean")], rep(0.05, nrow(bst_mod_3$evaluation_log)))
-names(pd3)[3] <- "eta"
-# Extract results for model with eta = 0.01
-pd4 <- cbind.data.frame(bst_mod_4$evaluation_log[,c("iter", "test_error_mean")], rep(0.01, nrow(bst_mod_4$evaluation_log)))
-names(pd4)[3] <- "eta"
-# Extract results for model with eta = 0.005
-pd5 <- cbind.data.frame(bst_mod_5$evaluation_log[,c("iter", "test_error_mean")], rep(0.005, nrow(bst_mod_5$evaluation_log)))
-names(pd5)[3] <- "eta"
-# Join datasets
-plot_data <- rbind.data.frame(pd1, pd2, pd3, pd4, pd5)
-# Converty ETA to factor
-plot_data$eta <- as.factor(plot_data$eta)
-# Plot points
-g_6 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
-  geom_point(alpha = 0.5) +
-  theme_bw() + # Set theme
-  theme(panel.border = element_blank(), # Remove grid
-        panel.background = element_blank()) + # Remove grid 
-  labs(x = "Number of Trees", title = "Error Rate v Number of Trees",
-       y = "Error Rate", color = "Learning \n Rate")  # Set labels
-g_6
-```
-
 ![](README_files/figure-gfm/eta%20plots-1.png)<!-- -->
-
-``` r
-# Plot lines
-g_7 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
-  geom_smooth(alpha = 0.5) +
-  theme_bw() + # Set theme
-  theme(panel.border = element_blank(), # Remove grid
-        panel.background = element_blank()) + # Remove grid 
-  labs(x = "Number of Trees", title = "Error Rate v Number of Trees",
-       y = "Error Rate", color = "Learning \n Rate")  # Set labels
-g_7
-```
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
@@ -2958,6 +2715,46 @@ xgb.plot.importance(imp_mat, top_n = 10)
 ```
 
 ![](README_files/figure-gfm/XGBoost%20Importance-1.png)<!-- -->
+
+``` r
+library(SHAPforxgboost)
+source("a_insights_shap_functions.r")
+shap_result <- shap.score.rank(xgb_model = bst_initial, 
+                X_train =  dtrain_ins,
+                shap_approx = F)
+```
+
+    ## make SHAP score by decreasing order
+
+``` r
+var_importance(shap_result, top_n=10)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+
+We can see the top three variables impacting the response whether
+customers will buy company’s vehicle insurance or not: 1.
+Vehicle\_Insured\_No 2. Vehicle\_Damage\_No 3. Age
+
+We can plot SHAP graph to see much more details of those variables.
+
+``` r
+shap_long = shap.prep(shap = shap_result, as.matrix(smote_data[,1:14]), top_n = 10)
+```
+
+    ## Loading required package: ggforce
+
+``` r
+plot.shap.summary(data_long = shap_long)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+
+From the SHAP graph we can see that the customers who did have vehicle
+insurance will be much more likely to purchase company’s vehicle
+insurance. Customers have no vehicle damages will be likely to purchase
+the vehicle insurance. And customers with low annual premium quote will
+be less likely to purchase the vehicle insurance
 
 ### Compare methods
 

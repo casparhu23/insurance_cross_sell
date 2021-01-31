@@ -92,7 +92,7 @@ Which policy channels are very different from the others? In other word, which p
 
 Density Plot
 
-```{r}
+```{r, echo=FALSE}
 library(scales)
 ggplot(train, aes(x=Vintage)) + 
   geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
@@ -176,7 +176,7 @@ train%>%
 Top 3 policy sales channel 26, 124, 152 channel has got 31782 customers in favor of the vehicle insurance.
 
 Let us start with policy channel 26:
-```{r}
+```{r,echo=FALSE}
 psc26 <- train%>%
   filter(Policy_Sales_Channel=="26")
 
@@ -294,7 +294,7 @@ chisq.test(train$Response, train$Vehicle_Age,  correct = FALSE)
 ```
 Since all p values are less than 0.01, we have up to 99% confidence that all four pairs of variables are associated. We can use assoc to see some directions of the association. 
 
-```{r}
+```{r,echo=FALSE}
 train_factor <- train%>%
   dplyr::select(where(is.factor))
 
@@ -492,7 +492,7 @@ region31 <- train[Region_Code=="31",] # extract region 31
 region48 <- train[Region_Code=="48",]  #extract region 48
 ```
 
-```{r}
+```{r,echo=FALSE}
 top_2_region <- rbind(region28,region8)
 bottom_2_region <- rbind(region31,region48)
 
@@ -620,9 +620,9 @@ test_subset <- train_data[50001:70000,]
 ```
 
 
-#We need to build a model to predict whether customers are interested in the vehicle insurance or not. And we will apply Random Forest, XGBoost two models for the optimal results.  
+We need to build a model to predict whether customers are interested in the vehicle insurance or not. And we will apply Random Forest, XGBoost two models for the optimal results.  
 
-Random Forest
+## Random Forest
 ```{r}
 library(randomForest)
 library(caret)
@@ -780,7 +780,7 @@ confusionMatrix(as.factor(rf_pred_class),
 ```
 Accuracy is 67.81% and sensitivity is 94.78%
 
-XGBoost 
+## XGBoost 
 
 ```{r}
 library(xgboost)
@@ -1263,7 +1263,7 @@ bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
 
 We can then plot the error rate over different learning rates:
 
-```{r eta plots}
+```{r eta plots,echo=FALSE}
 
 # Extract results for model with eta = 0.3
 pd1 <- cbind.data.frame(bst_mod_1$evaluation_log[,c("iter", "test_error_mean")], rep(0.3, nrow(bst_mod_1$evaluation_log)))
@@ -1365,13 +1365,35 @@ We can extract importance measures from XGBoost:
 
 ```{r XGBoost Importance}
 library(xgboostExplainer) # Load XGboost Explainer
-
 # Extract importance
 imp_mat <- xgb.importance(model = bst_final)
 # Plot importance (top 10 variables)
 xgb.plot.importance(imp_mat, top_n = 10)
 ```
+```{r xgboost explainer}
+explainer = buildExplainer(bst_initial, dtrain_ins, type="binary", base_score = 0.5, trees_idx = NULL) # Create explainer
+pred.breakdown = explainPredictions(bst_initial, explainer, dtest_ins) # Breakdown predictions        # ML global interpretation
+```
+```{r}
+library(SHAPforxgboost)
+source("a_insights_shap_functions.r")
+shap_result <- shap.score.rank(xgb_model = bst_initial, 
+                X_train =  dtrain_ins,
+                shap_approx = F)
+var_importance(shap_result, top_n=10)
+```
+We can see the top three variables impacting the response whether customers will buy company's vehicle insurance or not:
+1. Vehicle_Insured_No
+2. Vehicle_Damage_No
+3. Age
 
+We can plot SHAP graph to see much more details of those variables.
+
+```{r}
+shap_long = shap.prep(shap = shap_result, as.matrix(smote_data[,1:14]), top_n = 10)
+plot.shap.summary(data_long = shap_long)
+```
+From the SHAP graph we can see that the customers who did have vehicle insurance will be much more likely to purchase company's vehicle insurance. Customers have no vehicle damages will be likely to purchase the vehicle insurance. And customers with low annual premium quote will be less likely to purchase the vehicle insurance
 
 ### Compare methods
 

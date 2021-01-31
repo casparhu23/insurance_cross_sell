@@ -22,7 +22,7 @@ test <- fread("data/insurance_test.csv")
 
   As for the inference perspective, we performed various analysis on correlation (numeric), association (categorical), interaction, and mixed models. One of the interesting insights from this data is that top 2 regions (28 and 8) and bottom 2 regions (31 and 48) shows almost the same customers' demographics. The only difference is that top 2 regions have more population (data). Another insights is that when customers do not have vehicle insurance, customers who are interested in the company's insurance are willing to pay higher annual premium than customers that have no interests. 
 
-  As for the prediction point of view, we built random forest model and XGBoost models. We obtained 67.81% for accuracy and 94.78% for sensitivity. That result demonstrates us a decent model. Surprisingly, XGBoost model does not perform as well as random forest model in terms of sensitivity score that is almost 15% lower than random forest model performed. Furthermore, I think this modeling shows us sometimes the orginal XGBoost setting works for the best. That also concludes why programmers who created XGBoost model set those initial parameters as the standard. However, XGBoost still generated AUC for 0.82. As we know higher AUC can have better performance on differentiating positive and negative classes. Therefore, we still think XGBoost model is not the worst model but not as well as random forest especially for this data set.
+  As for the prediction point of view, we built random forest model and XGBoost models. We obtained 67.81% for accuracy and 94.78% for sensitivity. That result demonstrates us a decent model. Surprisingly, XGBoost model does not perform as well as random forest model in terms of sensitivity score that is almost 15% lower than random forest model performed. Furthermore, I think this modeling shows us sometimes the orginal XGBoost setting works for the best. That also concludes why programmers who created XGBoost model set those initial parameters as the standard. However, XGBoost still generated AUC for 0.83. As we know higher AUC can have better performance on differentiating positive and negative classes. Therefore, we still think XGBoost model is not the worst model but not as well as random forest especially for this data set.
 
 # Inference Analysis
 
@@ -34,7 +34,7 @@ summary(train)
 colnames(train) # check column names for the dataset
 ```
 
-```{r}
+```{r,echo=FALSE}
 library(scales)
 ggplot(train, aes(x=Annual_Premium)) + 
   geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
@@ -78,7 +78,7 @@ train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Y
 
 ## Correlation between Numeric Variables
 
-```{r}
+```{r,echo=FALSE}
 train_numeric <- train%>%
   dplyr::select(where(is.numeric))
 
@@ -105,7 +105,7 @@ chisq.test(train$Response, train$Vehicle_Age,  correct = FALSE)
 
 Since all p values are less than 0.01, we have up to 99% confidence that all four pairs of variables are associated. We can use assoc to see some directions of the association. 
 
-```{r,fig.width=6}
+```{r,fig.width=6, echo=FALSE}
 train_factor <- train%>%
   dplyr::select(where(is.factor))
 
@@ -206,7 +206,7 @@ region31 <- train[Region_Code=="31",] # extract region 31
 region48 <- train[Region_Code=="48",]  #extract region 48
 ```
 
-```{r}
+```{r,echo=FALSE}
 top_2_region <- rbind(region28,region8)
 bottom_2_region <- rbind(region31,region48)
 
@@ -576,7 +576,7 @@ for(i in 1:nrow(cv_params)){
 ```
 We can now the visualize the result of tuning these parameters:
 
-```{r Visualise Tune 1}
+```{r Visualise Tune 1,echo=FALSE}
 # Join results in dataset
 res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
 names(res_db)[3:4] <- c("auc", "error") 
@@ -734,7 +734,7 @@ for(i in 1:nrow(cv_params)){
 ```
 We can now the visualize the result of tuning these parameters:
 
-```{r visualise tuning sample params}
+```{r visualise tuning sample params,echo=FALSE}
 
 res_db <- cbind.data.frame(cv_params, auc_vec, error_vec)
 names(res_db)[3:4] <- c("auc", "error") 
@@ -898,7 +898,7 @@ bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
 
 We can then plot the error rate over different learning rates:
 
-```{r eta plots}
+```{r eta plots,echo=FALSE}
 # Extract results for model with eta = 0.3
 pd1 <- cbind.data.frame(bst_mod_1$evaluation_log[,c("iter", "test_error_mean")], rep(0.3, nrow(bst_mod_1$evaluation_log)))
 names(pd1)[3] <- "eta"
@@ -1004,6 +1004,29 @@ imp_mat <- xgb.importance(model = bst_final)
 xgb.plot.importance(imp_mat, top_n = 10)
 ```
 
+```{r}
+library(SHAPforxgboost)
+source("a_insights_shap_functions.r")
+shap_result <- shap.score.rank(xgb_model = bst_initial, 
+                X_train =  dtrain_ins,
+                shap_approx = F)
+var_importance(shap_result, top_n=10)
+```
+
+We can see the top three variables impacting the response whether customers will buy company's vehicle insurance or not:
+1. Vehicle_Insured_No
+2. Vehicle_Damage_No
+3. Age
+
+We can plot SHAP graph to see much more details of those variables.
+
+```{r}
+shap_long = shap.prep(shap = shap_result, as.matrix(smote_data[,1:14]), top_n = 10)
+plot.shap.summary(data_long = shap_long)
+```
+
+From the SHAP graph we can see that the customers who did have vehicle insurance will be much more likely to purchase company's vehicle insurance. Customers have no vehicle damages will be likely to purchase the vehicle insurance. And customers with low annual premium quote will be less likely to purchase the vehicle insurance
+
 ### Compare methods
 
 We can compare different models by plotting their auc curves. For this we will compare our first model against our final balanced model. 
@@ -1019,3 +1042,4 @@ plot.roc(roc_1, print.auc = TRUE, col = "red", print.auc.col = "red")
 # Print final model AUC
 plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue", print.auc.col = "blue", add = TRUE)
 ```
+
