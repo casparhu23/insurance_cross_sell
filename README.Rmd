@@ -332,41 +332,47 @@ This model predicts 68.32% accuracy for all correct predictions including true p
 
 Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
 
-```{r}
-#start parallel processing to make machine learning much more efficiently (reduce running time)
-library(doParallel)
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
-```
-
 ### Tuning the randomforest model
 
 ```{r}
+# start parallel processing to make machine learning much more efficiently (reduce running time)
+library(doParallel)
+library(foreach)
+cl <- makeCluster(detectCores() - 1) # save one core only
+registerDoParallel(cl)
+
+library(randomForest)
+library(caret)
 mtry_vals <- c(2, 4, 5, 7, 9, 11, 14) # last parameter is 14 because we only have 14 independent variables
 nodesize_vals <- c(1, 10, 15, 50, 100, 150, 200, 500, 1000)
 
-params <- expand.grid(mtry_vals, nodesize_vals) # make a table for two parameters 
-names(params) <- c("mtry", "nodesize") # set up column names for the table we just created
-acc_vec <- rep(NA, nrow(params)) # set up acc_vec output variable
-sens_vec <- rep(NA, nrow(params)) # set up sens_vec output variable
+tuning_params <- expand.grid(mtry_vals,nodesize_vals) # make a table for two parameters 
+names(tuning_params) <- c("mtry_vals", "nodesize_vals") # set up column names for the table
 
-for(i in 1:nrow(params)){
-  rf_mod <- randomForest(Response ~., # Set tree formula
-                         data = smote_data, # Set dataset
-                         ntree = 800,
-                         nodesize = params$nodesize[i],
-                         mtry = params$mtry[i]) # Set number of trees to use
-  rf_preds <-rf_mod$predicted # Create predictions for bagging model
+foreach_rf <- foreach(i = 1:nrow(tuning_params), 
+              .packages='randomForest',
+              .combine = 'rbind') %dopar%
+  {
+    rf_Mod <- randomForest(Response ~ ., # Set tree formula
+                          data= smote_data, # Set dataset
+                          mtry = tuning_params$mtry_vals[i],
+                          nodesize = tuning_params$nodesize_vals[i],
+                          ntree = 800)
+    
+    rf_preds <- rf_Mod$predicted # Create predictions for bagging model
+    
+    t <- table(rf_preds,   smote_data$Response) # Create table
+    c <- caret::confusionMatrix(t, positive = "Interest") # Produce confusion matrix
   
-  t <- table(rf_preds,   smote_data$Response) # Create table
-  c <- confusionMatrix(t, positive = "Interest") # Produce confusion matrix
-  
-  acc_vec[i] <- c$overall[1]   # loop the accuracy results into acc_vec
-  sens_vec[i] <- c$byClass[1]  # loop the sensitivity results into sens_vec
-}
+    data.frame(acc_vec=c$overall[1], # loop the accuracy results into acc_vec
+               sens_vec=c$byClass[1], # loop the sensitivity results into sens_vec
+               mtry=tuning_params[i,"mtry_vals"],
+               nodesize=tuning_params[i,"nodesize_vals"])
+    
+  }
 ```
 
-```{r Visualise Tuning}
+```{r Visualise Tuning,echo=FALSE}
 res_db <- cbind.data.frame(params, acc_vec, sens_vec) #columns bind togther
 res_db$mtry <- as.factor(res_db$mtry) # Convert tree number to factor for plotting
 res_db$nodesize <- as.factor(res_db$nodesize) # Convert node size to factor for plotting
@@ -444,6 +450,7 @@ dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]),
 dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
                          label = as.numeric(test_subset$Response) - 1)
 ```
+Note: Label: 1 means NOInterst Label: 0 means Interest
 
 ```{r Train xgboost}
 set.seed(111111)
@@ -991,20 +998,27 @@ As you may recall that our original XGBoost model's accuracy is 77% and sensitiv
 
 The winner of two models will be random forest based on the nearly 15% gap between the sensitivity score.
 
-### Variable Importance with XGBoost 
+### Compare methods
+
+We can compare different models by plotting their auc curves. For this we will compare our first model against our final balanced model. 
+
+```{r compare auc}
+library(pROC) 
+# Calculate first model ROC
+roc_1 = roc(test_subset$Response, boost_preds_1) # naive model
+# Calculate final model ROC
+roc_2 = roc(test_subset$Response, boost_preds) # final model
+# Print initial model AUC
+plot.roc(roc_1, print.auc = TRUE, col = "red", print.auc.col = "red")
+# Print final model AUC
+plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue", print.auc.col = "blue", add = TRUE)
+```
+
+### Variable Importance with XGBoost - Global Interpretation 
 
 We can extract importance measures from XGBoost:
 
 ```{r XGBoost Importance}
-library(xgboostExplainer) # Load XGboost Explainer
-
-# Extract importance
-imp_mat <- xgb.importance(model = bst_final)
-# Plot importance (top 10 variables)
-xgb.plot.importance(imp_mat, top_n = 10)
-```
-
-```{r}
 library(SHAPforxgboost)
 source("a_insights_shap_functions.r")
 shap_result <- shap.score.rank(xgb_model = bst_initial, 
@@ -1025,21 +1039,48 @@ shap_long = shap.prep(shap = shap_result, as.matrix(smote_data[,1:14]), top_n = 
 plot.shap.summary(data_long = shap_long)
 ```
 
-From the SHAP graph we can see that the customers who did have vehicle insurance will be much more likely to purchase company's vehicle insurance. Customers have no vehicle damages will be likely to purchase the vehicle insurance. And customers with low annual premium quote will be less likely to purchase the vehicle insurance
+From the SHAP graph we can see that the customers who did have vehicle insurance will be less likely to purchase company's vehicle insurance. We can recommend company adjust advertisement strategies towards customers who did not have vehicle insurance yet. Customers have no vehicle damages will be less likely to purchase the vehicle insurance. Companies can analyze further the extent to which vehicles are damaged to adjust marketing campagin. And customers with low annual premium quote will be more likely to purchase the vehicle insurance. We cannot always use "price war" methodology to apply this insight; however, if we can use competitors' data to dig deeper and find the right price premium for customers, we are confident in increasing revenue. 
 
-### Compare methods
+### Variable Importance with XGBoost - Local Interpretation 
 
-We can compare different models by plotting their auc curves. For this we will compare our first model against our final balanced model. 
+```{r}
+library(lime)       # ML local interpretation
+library(vip)        # ML global interpretation
+library(pdp)        # ML global interpretation
+library(caret)      # ML model building
 
-```{r compare auc}
-library(pROC) 
-# Calculate first model ROC
-roc_1 = roc(test_subset$Response, boost_preds_1) # naive model
-# Calculate final model ROC
-roc_2 = roc(test_subset$Response, boost_preds) # final model
-# Print initial model AUC
-plot.roc(roc_1, print.auc = TRUE, col = "red", print.auc.col = "red")
-# Print final model AUC
-plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue", print.auc.col = "blue", add = TRUE)
+explainer_caret <- lime(smote_data, bst_initial, n_bins = 5)
+
+explanation_caret <- explain(
+  x = test_subset[6:9,1:14],  # choose 2 rows for local interpretation
+  explainer = explainer_caret, # use explainer
+  n_permutations = 500, # set the number of permutations for each explanation
+  n_features = 10, # the number of features to explain
+  n_labels = 1, # the number of label to explain 
+  dist_fun = "manhattan",
+  kernel_width = 3,
+  feature_select = "lasso_path" # use optimal method to select feature
+  )
 ```
+
+Here are the actual data for case 1 to case 4 from row 6 to 9 in test_subset:
+```{r}
+test_subset[6:9,15]
+```
+
+Note: Label: 1 means NOInterst Label: 0 means Interest
+
+```{r,fig.height=3}
+plot_explanations(explanation_caret)
+```
+The heatmap informed us of vehicle_insured strong impact versus other variables even just in four cases. 
+
+```{r,fig.height=3}
+plot_features(explanation_caret,ncol=2)
+```
+Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 1 ("NOInterest"), which means customers who did have purchased vehicle insurance will NOT be interested in buying company's vehicle insurance. 
+
+Case 2: Although vehicle_insured_0 is a contradicted variable to the prediction in case 2, model still predicted correctly for case 2. 
+
+Case 3 & 4: We can see that when vehicle_insured_0 is larger than 0.8, our model deemed case response as 0 ("Interest"), which means customers who did not purchase vehicle insurance before will be interested for case three and four; nevertheless, the model's result is contrary to the actual response even with the supportive variable. 
 

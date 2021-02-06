@@ -2,7 +2,10 @@
 title: "insurance_crosssell"
 author: "Caspar Hu"
 date: "12/29/2020"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
 ---
 
 ```{r setup, include=FALSE}
@@ -679,13 +682,74 @@ This model predicts 68.32% accuracy for all correct predictions including true p
 
 Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
 
+Method 1:
 ```{r}
-#start parallel processing
+#start parallel processing to make machine learning much more efficiently (reduce running time)
 library(doParallel)
 cl <- makePSOCKcluster(5)
 registerDoParallel(cl)
 ```
+Method 2:
+```{r}
+# start parallel processing
+library(doParallel)
+library(foreach)
+cl <- makeCluster(detectCores() - 1) # save one core only
+registerDoParallel(cl)
+```
 
+```{r}
+library(randomForest)
+library(caret)
+mtry_vals <- c(2, 4, 5, 7, 9, 11, 14)
+nodesize_vals <- c(1, 10, 15, 50, 100, 150, 200, 500, 1000)
+
+tuning_params <- expand.grid(mtry_vals,nodesize_vals)
+names(tuning_params) <- c("mtry_vals", "nodesize_vals")
+
+foreach_rf <- foreach(i = 1:nrow(tuning_params), 
+              .packages='randomForest',
+              .combine = 'rbind') %dopar%
+  {
+    rf_Mod <- randomForest(Response ~ ., 
+                          data= smote_data,
+                          mtry = tuning_params$mtry_vals[i],
+                          nodesize = tuning_params$nodesize_vals[i],
+                          ntree = 800)
+    
+    rf_preds <- rf_Mod$predicted # Create predictions for bagging model
+    
+    t <- table(rf_preds,   smote_data$Response) # Create table
+    c <- caret::confusionMatrix(t, positive = "Interest") # Produce confusion matrix
+  
+    data.frame(acc_vec=c$overall[1],
+               sens_vec=c$byClass[1],
+               mtry=tuning_params[i,"mtry_vals"],
+               nodesize=tuning_params[i,"nodesize_vals"])
+    
+  }
+# do.call("rbind", results)
+stopCluster(cl) # stop parallel processing
+```
+
+```{r Visualise Tuning }
+res_db <- foreach_rf
+res_db$mtry <- as.factor(res_db$mtry) # Convert tree number to factor for plotting
+res_db$nodesize <- as.factor(res_db$nodesize) # Convert node size to factor for plotting
+ggplot(res_db, aes(y = mtry, x = nodesize, fill = acc_vec)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$acc_vec), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Node Size", y = "mtry", fill = "OOB Accuracy") # Set labels
+
+```
 
 ##Tuning the randomforest model
 
@@ -798,7 +862,7 @@ dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]),
                          label = as.numeric(test_subset$Response) - 1)
 
 ```
-
+Note: Label: 1 means NOInterst Label: 0 means Interest
 ```{r Train xgboost}
 set.seed(111111)
 bst_initial <- xgboost(data = dtrain_ins, # Set training data
@@ -1359,14 +1423,14 @@ As you may recall that our original XGBoost model's accuracy is 77% and sensitiv
 
 The winner of two models will be random forest based on the nearly 15% gap between the sensitivity score.  
 
-### Variable Importance with XGBoost 
+### Variable Importance with XGBoost - Global Interpretation 
 
 We can extract importance measures from XGBoost:
 
 ```{r XGBoost Importance}
 library(xgboostExplainer) # Load XGboost Explainer
 # Extract importance
-imp_mat <- xgb.importance(model = bst_final)
+imp_mat <- xgb.importance(model = bst_initial)
 # Plot importance (top 10 variables)
 xgb.plot.importance(imp_mat, top_n = 10)
 ```
@@ -1374,6 +1438,7 @@ xgb.plot.importance(imp_mat, top_n = 10)
 explainer = buildExplainer(bst_initial, dtrain_ins, type="binary", base_score = 0.5, trees_idx = NULL) # Create explainer
 pred.breakdown = explainPredictions(bst_initial, explainer, dtest_ins) # Breakdown predictions        # ML global interpretation
 ```
+
 ```{r}
 library(SHAPforxgboost)
 source("a_insights_shap_functions.r")
@@ -1393,7 +1458,50 @@ We can plot SHAP graph to see much more details of those variables.
 shap_long = shap.prep(shap = shap_result, as.matrix(smote_data[,1:14]), top_n = 10)
 plot.shap.summary(data_long = shap_long)
 ```
-From the SHAP graph we can see that the customers who did have vehicle insurance will be much more likely to purchase company's vehicle insurance. Customers have no vehicle damages will be likely to purchase the vehicle insurance. And customers with low annual premium quote will be less likely to purchase the vehicle insurance
+From the SHAP graph we can see that the customers who did have vehicle insurance will be less likely to purchase company's vehicle insurance. We can recommend company adjust advertisement strategies towards customers who did not have vehicle insurance yet. Customers have no vehicle damages will be less likely to purchase the vehicle insurance. Companies can analyze further the extent to which vehicles are damaged to adjust marketing campagin. And customers with low annual premium quote will be more likely to purchase the vehicle insurance. We cannot always use "price war" methodology to apply this insight; however, if we can use competitors' data to dig deeper and find the right price premium for customers, we are confident in increasing revenue. 
+
+### Variable Importance with XGBoost - Local Interpretation 
+
+```{r}
+library(lime)       # ML local interpretation
+library(vip)        # ML global interpretation
+library(pdp)        # ML global interpretation
+library(caret)      # ML model building
+
+explainer_caret <- lime(smote_data, bst_initial, n_bins = 5)
+
+explanation_caret <- explain(
+  x = test_subset[6:9,1:14],  # choose 2 rows for local interpretation
+  explainer = explainer_caret, # use explainer
+  n_permutations = 500, # set the number of permutations for each explanation
+  n_features = 10, # the number of features to explain
+  n_labels = 1, # the number of label to explain 
+  dist_fun = "manhattan",
+  kernel_width = 3,
+  feature_select = "lasso_path"
+  )
+```
+
+Here are the actual data for case 1 to case 4 from row 6 to 9 in test_subset:
+```{r}
+test_subset[6:9,15]
+```
+
+Note: Label: 1 means NOInterst Label: 0 means Interest
+
+```{r,fig.height=3}
+plot_explanations(explanation_caret)
+```
+The heatmap informed us of vehicle_insured strong impact versus other variables even just in four cases. 
+
+```{r,fig.height=3}
+plot_features(explanation_caret,ncol=2)
+```
+Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 1 ("NOInterest"), which means customers who did have purchased vehicle insurance will NOT be interested in buying company's vehicle insurance. 
+
+Case 2: Although vehicle_insured_0 is a contradicted variable to the prediction in case 2, model still predicted correctly for case 2. 
+
+Case 3 & 4: We can see that when vehicle_insured_0 is larger than 0.8, our model deemed case response as 0 ("Interest"), which means customers who did not purchase vehicle insurance before will be interested for case three and four; nevertheless, the model's result is contrary to the actual response even with the supportive variable. 
 
 ### Compare methods
 
