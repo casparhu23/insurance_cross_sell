@@ -28,36 +28,11 @@ test <- fread("data/insurance_test.csv")
 
 # Executive Summary
 
-This data set is from Kaggle
-(<https://www.kaggle.com/anmolkumar/health-insurance-cross-sell-prediction>),
-which describes a health insurance company collecting customers’
-demographics, vehicle information, and some insurance policy. The
-purpose of this project is to perform two types of analysis: inference
-and prediction.
+This data set is from Kaggle (https://www.kaggle.com/anmolkumar/health-insurance-cross-sell-prediction), which describes a health insurance company collecting customers’ demographics, vehicle information, and some insurance policy. The purpose of this project is to perform two types of analysis: inference and prediction.
 
-As for the inference perspective, we performed various analysis on
-correlation (numeric), association (categorical), interaction, and mixed
-models. One of the interesting insights from this data is that top 2
-regions (28 and 8) and bottom 2 regions (31 and 48) shows almost the
-same customers’ demographics. The only difference is that top 2 regions
-have more population (data). Another insights is that when customers do
-not have vehicle insurance, customers who are interested in the
-company’s insurance are willing to pay higher annual premium than
-customers that have no interests.
+We performed various analyses on correlation (numeric), association (categorical chisq test), interaction, and mixed models for the inference perspective. One of the interesting insights from this data is that the top 2 regions (28 and 8) and bottom 2 regions (31 and 48) shows almost the same customers’ demographics. The only difference is that the top 2 regions have more population (data). Another insight is that when customers do not have vehicle insurance, customers interested in the company’s insurance are willing to pay a higher annual premium than customers with no interest.
 
-As for the prediction point of view, we built random forest model and
-XGBoost models. We obtained 67.81% for accuracy and 94.78% for
-sensitivity. That result demonstrates us a decent model. Surprisingly,
-XGBoost model does not perform as well as random forest model in terms
-of sensitivity score that is almost 15% lower than random forest model
-performed. Furthermore, I think this modeling shows us sometimes the
-orginal XGBoost setting works for the best. That also concludes why
-programmers who created XGBoost model set those initial parameters as
-the standard. However, XGBoost still generated AUC for 0.83. As we know
-higher AUC can have better performance on differentiating positive and
-negative classes. Therefore, we still think XGBoost model is not the
-worst model but not as well as random forest especially for this data
-set.
+As for the prediction point of view, we built a random forest model and XGBoost models. We obtained 67.81% for accuracy and 94.78% for sensitivity. That result demonstrates us a decent model. Surprisingly, the XGBoost model does not perform as well as the random forest model in terms of sensitivity score that is almost 15% lower than the random forest model performed. Furthermore, I think this modeling shows us sometimes the original XGBoost setting works for the best. That also concludes why programmers who created the XGBoost model set those initial parameters as the standard. However, XGBoost still generated an AUC of 0.83. As we know, higher AUC can have better performance on differentiating positive and negative classes. Therefore, we still think the XGBoost model is not the worst but not as well as random forest especially for this data set.
 
 # Inference Analysis
 
