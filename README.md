@@ -1941,8 +1941,9 @@ Note: Label: 1 means NOInterst Label: 0 means Interest
 plot_explanations(explanation_caret)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> The heatmap
-informed us of vehicle\_insured strong impact versus other variables
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> 
+
+The heatmap informed us of vehicle\_insured strong impact versus other variables
 even just in four cases.
 
 ``` r
