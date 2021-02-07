@@ -159,7 +159,7 @@ plot(modEffects3)
 
 When customers do not have vehicle insurance, customers who are interested in the company's insurance are willing to pay higher annual premium than customers that have no interests.
 
-##Logistic model
+## Logistic model
 
 ```{r}
 logTest <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicle_Insured + 
@@ -329,6 +329,7 @@ g_1 <- ggplot(plot_dat, aes(x = trees, y = oob_error)) + # Set x as trees and y 
        y = "Error Rate")  # Set labels
 g_1 # Print plot
 ```
+
 The optimal number of trees are from 700 to 800 trees from the graph above, we will use 800 tress for tuning the model.
 
 ```{r}
@@ -425,14 +426,14 @@ g_2 # Generate plot
 ```
 
 Since we cannot use one set of parameter to satisfy both accuracy and sensitivity, however 
-we want to predict the positive class corresponding to INTEREST customers, so we will focus on the highest sensitivity score on second graph (g_2). It looks like the best set of parameters for this tree are mtry 2 and node size 10.
+we want to predict the positive class corresponding to INTEREST customers, so we will focus on the highest sensitivity score on second graph (g_2). It looks like the best set of parameters for this tree are mtry 2 and node size 1000.
 
 ```{r}
 set.seed(111111)
 rf_mod_final <- randomForest(Response ~ ., # Set tree formula
                        data = smote_data, # Set dataset
                        ntree = 800,
-                       nodesize=10,
+                       nodesize=1000,
                        mtry=2 
                        ) # Set number of trees to use
 rf_mod_final # final random forest model
@@ -447,7 +448,7 @@ confusionMatrix(as.factor(rf_pred_class),
                 test_subset$Response, positive = "Interest") 
 ```
 
-From the confusion matrix, we got better sensitivity 94.78%, which was a little bit higher than the naive random forest model. And it is reasonable that accuracy is 67.81% since we did not choose the parameter that were the best for enhancing accuracy score. Let's keep those scores in mind and we will use XGBoost to build the model to see how it will go. 
+From the confusion matrix, we got better sensitivity 95.47%, which was a little bit higher than the naive random forest model. And it is reasonable that accuracy is 66.45% since we did not choose the parameter that were the best for enhancing accuracy score. Let's keep those scores in mind and we will use XGBoost to build the model to see how it will go. 
 
 ## XGBoost 
 
@@ -484,6 +485,7 @@ bst_initial <- xgboost(data = dtrain_ins, # Set training data
 ```
 
 Instead of using 0.5 as cut off point, we will use `OptimalCutpoints` package to decide which is the best optimal points for our confusion matrix
+
 ```{r xbgoost predictions}
 library(OptimalCutpoints) # load package for setting up optimal points
 boost_preds <- predict(bst_initial, dtrain_ins) # Create predictions for xgboost model (dtrain_ins)
@@ -509,6 +511,7 @@ boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[
 t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
+
 For our original XGBoost model we have 77% accuracy and 78.88% sensitivity. We hope we can enhance accuracy rate and sensitivity rate by tuning the model. 
 
 This model predicts 77% accuracy for all correct predictions including true positive and true negative and predicts 78.88% sensitivity for actual interested customers are correctly predicted as interested
@@ -559,7 +562,10 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
   geom_point()+
   geom_smooth()
 ```
+
 Based on the graph and results, the optimal number of iterations is 402. We will set the number of iterations to 500
+
+## Tuning the XGBoost model
 
 Next, we will tune `max depth values` and `min child values` 
 ```{r tune xgb params 1}
@@ -1032,6 +1038,8 @@ plot.roc(roc_1, print.auc = TRUE, col = "red", print.auc.col = "red")
 plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue", print.auc.col = "blue", add = TRUE)
 ```
 
+And naive models still performs a little better than our final model. 
+
 ### Variable Importance with XGBoost - Global Interpretation 
 
 We can extract importance measures from XGBoost:
@@ -1045,7 +1053,7 @@ shap_result <- shap.score.rank(xgb_model = bst_initial,
 var_importance(shap_result, top_n=10)
 ```
 
-We can see the top three variables impacting the response whether customers will buy company's vehicle insurance or not:
+We can see the top three variables impacting the response whether customers will be interested in company's vehicle insurance or not:
 1. Vehicle_Insured_No
 2. Vehicle_Damage_No
 3. Age
@@ -1088,12 +1096,12 @@ test_subset[6:9,15]
 
 Note: Label: 1 means NOInterst Label: 0 means Interest
 
-```{r,fig.height=5}
+```{r,fig.height=4}
 plot_explanations(explanation_caret)
 ```
 The heatmap informed us of vehicle_insured strong impact versus other variables even just in four cases. 
 
-```{r,fig.height=5}
+```{r,fig.height=8}
 plot_features(explanation_caret,ncol=2)
 ```
 

@@ -312,7 +312,7 @@ When customers do not have vehicle insurance, customers who are
 interested in the company’s insurance are willing to pay higher annual
 premium than customers that have no interests.
 
-\#\#Logistic model
+## Logistic model
 
 ``` r
 logTest <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicle_Insured + 
@@ -896,9 +896,10 @@ g_1 # Print plot
 
     ## `geom_smooth()` using method = 'gam' and formula 'y ~ s(x, bs = "cs")'
 
-![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- --> The optimal
-number of trees are from 700 to 800 trees from the graph above, we will
-use 800 tress for tuning the model.
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+The optimal number of trees are from 700 to 800 trees from the graph
+above, we will use 800 tress for tuning the model.
 
 ``` r
 set.seed(111111)
@@ -1015,14 +1016,14 @@ Since we cannot use one set of parameter to satisfy both accuracy and
 sensitivity, however we want to predict the positive class corresponding
 to INTEREST customers, so we will focus on the highest sensitivity score
 on second graph (g\_2). It looks like the best set of parameters for
-this tree are mtry 2 and node size 10.
+this tree are mtry 2 and node size 1000.
 
 ``` r
 set.seed(111111)
 rf_mod_final <- randomForest(Response ~ ., # Set tree formula
                        data = smote_data, # Set dataset
                        ntree = 800,
-                       nodesize=10,
+                       nodesize=1000,
                        mtry=2 
                        ) # Set number of trees to use
 rf_mod_final # final random forest model
@@ -1030,16 +1031,16 @@ rf_mod_final # final random forest model
 
     ## 
     ## Call:
-    ##  randomForest(formula = Response ~ ., data = smote_data, ntree = 800,      nodesize = 10, mtry = 2) 
+    ##  randomForest(formula = Response ~ ., data = smote_data, ntree = 800,      nodesize = 1000, mtry = 2) 
     ##                Type of random forest: classification
     ##                      Number of trees: 800
     ## No. of variables tried at each split: 2
     ## 
-    ##         OOB estimate of  error rate: 20.76%
+    ##         OOB estimate of  error rate: 20.87%
     ## Confusion matrix:
     ##            Interest NOInterest class.error
-    ## Interest      11749        499  0.04074135
-    ## NOInterest     4586       7662  0.37442848
+    ## Interest      11723        525  0.04286414
+    ## NOInterest     4587       7661  0.37451012
 
 ``` r
 rf_preds_final <- predict(rf_mod_final, test_subset, type = "prob") # Create predictions for random forest model
@@ -1056,33 +1057,33 @@ confusionMatrix(as.factor(rf_pred_class),
     ## 
     ##             Reference
     ## Prediction   Interest NOInterest
-    ##   Interest       2370       6640
-    ##   NOInterest      102      10888
+    ##   Interest       2367       6620
+    ##   NOInterest      105      10908
     ##                                           
-    ##                Accuracy : 0.6629          
-    ##                  95% CI : (0.6563, 0.6695)
+    ##                Accuracy : 0.6638          
+    ##                  95% CI : (0.6572, 0.6703)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.2715          
+    ##                   Kappa : 0.272           
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.9587          
-    ##             Specificity : 0.6212          
-    ##          Pos Pred Value : 0.2630          
-    ##          Neg Pred Value : 0.9907          
+    ##             Sensitivity : 0.9575          
+    ##             Specificity : 0.6223          
+    ##          Pos Pred Value : 0.2634          
+    ##          Neg Pred Value : 0.9905          
     ##              Prevalence : 0.1236          
-    ##          Detection Rate : 0.1185          
-    ##    Detection Prevalence : 0.4505          
-    ##       Balanced Accuracy : 0.7900          
+    ##          Detection Rate : 0.1183          
+    ##    Detection Prevalence : 0.4494          
+    ##       Balanced Accuracy : 0.7899          
     ##                                           
     ##        'Positive' Class : Interest        
     ## 
 
-From the confusion matrix, we got better sensitivity 94.78%, which was a
+From the confusion matrix, we got better sensitivity 95.47%, which was a
 little bit higher than the naive random forest model. And it is
-reasonable that accuracy is 67.81% since we did not choose the parameter
+reasonable that accuracy is 66.45% since we did not choose the parameter
 that were the best for enhancing accuracy score. Let’s keep those scores
 in mind and we will use XGBoost to build the model to see how it will
 go.
@@ -1310,9 +1311,12 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- --> Based on the
-graph and results, the optimal number of iterations is 402. We will set
-the number of iterations to 500
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
+Based on the graph and results, the optimal number of iterations is 402.
+We will set the number of iterations to 500
+
+## Tuning the XGBoost model
 
 Next, we will tune `max depth values` and `min child values`
 
@@ -1779,6 +1783,8 @@ plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue
 
 ![](README_files/figure-gfm/compare%20auc-1.png)<!-- -->
 
+And naive models still performs a little better than our final model.
+
 ### Variable Importance with XGBoost - Global Interpretation
 
 We can extract importance measures from XGBoost:
@@ -1800,7 +1806,7 @@ var_importance(shap_result, top_n=10)
 ![](README_files/figure-gfm/XGBoost%20Importance-1.png)<!-- -->
 
 We can see the top three variables impacting the response whether
-customers will buy company’s vehicle insurance or not: 1.
+customers will be interested in company’s vehicle insurance or not: 1.
 Vehicle\_Insured\_No 2. Vehicle\_Damage\_No 3. Age
 
 We can plot SHAP graph to see much more details of those variables.
@@ -1943,10 +1949,12 @@ even just in four cases.
 plot_features(explanation_caret,ncol=2)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- --> Case 1: When
-vehicle\_insured\_0 is less than 0.2, our model deemed case response as
-1 (“NOInterest”), which means customers who did have purchased vehicle
-insurance will NOT be interested in buying company’s vehicle insurance.
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+
+Case 1: When vehicle\_insured\_0 is less than 0.2, our model deemed case
+response as 1 (“NOInterest”), which means customers who did have
+purchased vehicle insurance will NOT be interested in buying company’s
+vehicle insurance.
 
 Case 2: Although vehicle\_insured\_0 is a contradicted variable to the
 prediction in case 2, model still predicted correctly for case 2.
