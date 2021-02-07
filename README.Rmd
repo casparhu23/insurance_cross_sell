@@ -159,6 +159,23 @@ plot(modEffects3)
 
 When customers do not have vehicle insurance, customers who are interested in the company's insurance are willing to pay higher annual premium than customers that have no interests.
 
+##Logistic model
+
+```{r}
+logTest <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicle_Insured + 
+               Vehicle_Age + Vehicle_Damage + Region_Code+Policy_Sales_Channel, data = train, 
+               family = binomial)  
+
+exp(logTest$coefficients)
+```
+
+Male customers are about 9.5% likely to be interested in the vehicle insurance than female customers.
+Customers with driving license are about 231.7% likely to be interested in the vehicle insurance.
+Older vehicles(elder than 2 years) are about 331% likely to be interested in the vehicle insurance.
+Damaged vehicles are about 658.7% likely to be interested in the vehicle insurance.
+
+
+
 ## Mixed Models
 ```{r}
 library(lme4)
@@ -169,9 +186,7 @@ summary(riMod)
 ranef(riMod)
 MuMIn::r.squaredGLMM(riMod)
 ```
-
-Here we have two values: the marginal R2 (R2m) and the conditional R2 (R2c). The marginal values as the standard type of R2 -- it is the variability explained by the fixed effects part of the model.
-The conditional R2 is using both fixed and random effects. So in this case, we would see that we are accounting for about 19% (0.2010-0.0084) of the variation in region alone.
+Our model accounts for about 19% (0.2010-0.0084) of the variation in region alone.
 
 We can also use `lmerTest::lmer` to show the p values associated with the riMod model.
 ```{r}
@@ -207,6 +222,7 @@ region48 <- train[Region_Code=="48",]  #extract region 48
 ```
 
 ```{r,echo=FALSE}
+library(scales)
 top_2_region <- rbind(region28,region8)
 bottom_2_region <- rbind(region31,region48)
 
@@ -230,8 +246,9 @@ ggplot(data=bottom_2_region,aes(x=Age,fill=Region_Code))+
   geom_histogram(alpha=0.5)+
   theme_minimal()
 ```
+
 Top 2 regions: 
-After we limit annual premium from 0 to 100K, we can see that top 2 regions cover almost the same range from 25K to 75K for the majority group of the annual premium. The age histogram shows almost the same pattern that the peaks are similar shown in around 26yrs, 48yrs, 53yrs, 67yrs and 72 yrs old in both 28 and 8 regions. Thus, region 28 and 8 are not so different from each other.
+After we limit annual premium from 0 to 100K, we can see that top 2 regions cover almost the same range from 25K to 75K for the majority group of the annual premium. The age histogram shows almost the same pattern that the peaks are similar shown in around 26, 48, 53, 67 and 72 years old in both 28 and 8 regions. Thus, region 28 and 8 are not so different from each other.
 
 Bottom 2 regions:
 And it is surprised to see the bottom 2 regions also have similarities in annual premium and age too.
@@ -373,7 +390,7 @@ foreach_rf <- foreach(i = 1:nrow(tuning_params),
 ```
 
 ```{r Visualise Tuning,echo=FALSE}
-res_db <- cbind.data.frame(params, acc_vec, sens_vec) #columns bind togther
+res_db <- foreach_rf
 res_db$mtry <- as.factor(res_db$mtry) # Convert tree number to factor for plotting
 res_db$nodesize <- as.factor(res_db$nodesize) # Convert node size to factor for plotting
 g_1 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = acc_vec)) + # set aesthetics
@@ -945,6 +962,7 @@ g_7 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
        y = "Error Rate", color = "Learning \n Rate")  # Set labels
 g_7
 
+
 ```
 
 From this it looks like an eta value of 0.05 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
@@ -1070,14 +1088,15 @@ test_subset[6:9,15]
 
 Note: Label: 1 means NOInterst Label: 0 means Interest
 
-```{r,fig.height=3}
+```{r,fig.height=5}
 plot_explanations(explanation_caret)
 ```
 The heatmap informed us of vehicle_insured strong impact versus other variables even just in four cases. 
 
-```{r,fig.height=3}
+```{r,fig.height=5}
 plot_features(explanation_caret,ncol=2)
 ```
+
 Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 1 ("NOInterest"), which means customers who did have purchased vehicle insurance will NOT be interested in buying company's vehicle insurance. 
 
 Case 2: Although vehicle_insured_0 is a contradicted variable to the prediction in case 2, model still predicted correctly for case 2. 

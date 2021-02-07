@@ -44,7 +44,6 @@ train <- train%>%
          Region_Code=as.factor(as.character(Region_Code)),
          Response=as.factor(as.character(Response)))
 
-
 ```
 
 ```{r}
@@ -433,7 +432,7 @@ logTest <- glm(Response ~ Annual_Premium +Gender+ Age + Driving_License + Vehicl
                Vehicle_Age + Vehicle_Damage + Region_Code+Policy_Sales_Channel, data = train, 
                family = binomial)  
 
-summary(logTest)
+print(summary(logTest))
 
 exp(logTest$coefficients)
 ```
@@ -443,7 +442,7 @@ Customers with driving license are about 231.7% likely to be interested in the v
 Older vehicles(elder than 2 years) are about 331% likely to be interested in the vehicle insurance.
 Damaged vehicles are about 658.7% likely to be interested in the vehicle insurance.
 
-Mixed Models (Fixed + Random)
+## Mixed Models (Fixed + Random)
 
 ```{r}
 interceptMod <- lmer(Annual_Premium ~ 1+(1|Region_Code), 
@@ -453,7 +452,7 @@ summary(interceptMod)
 ```
 
 ```{r}
-riMod <- lmer(Annual_Premium ~ Age+Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
+riMod <- lmer(Annual_Premium ~ Age+Gender +Driving_License+Vehicle_Insured+Vehicle_Age+Vehicle_Damage+(1|Region_Code), 
               data = train)
 
 summary(riMod)
@@ -472,8 +471,9 @@ summary(riModP)
 ```
 
 
-```{r}
+```{r,fig.height=4}
 library(sjPlot)
+library(ggplot2)
 
 plot_model(riMod, type = "re") + 
   theme_minimal()
@@ -519,6 +519,7 @@ ggplot(data=bottom_2_region,aes(x=Age,fill=Region_Code))+
   geom_histogram(alpha=0.5)+
   theme_minimal()
 ```
+
 Top 2 regions: 
 After we limit annual premium from 0 to 100K, we can see that top 2 regions cover almost the same range from 25K to 75K for the majority group of the annual premium. The age histogram shows almost the same pattern that the peaks are similar shown in around 26yrs, 48yrs, 53yrs, 67yrs and 72 yrs old in both 28 and 8 regions. Thus, region 28 and 8 are not so different from each other.
 
@@ -842,6 +843,7 @@ confusionMatrix(as.factor(rf_pred_class),
                 test_subset$Response, positive = "Interest") 
 
 ```
+
 Accuracy is 67.81% and sensitivity is 94.78%
 
 ## XGBoost 
