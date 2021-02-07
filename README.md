@@ -1664,14 +1664,14 @@ We can then plot the error rate over different learning rates:
 
 ![](README_files/figure-gfm/eta%20plots-2.png)<!-- -->
 
-From this it looks like an eta value of 0.05 gives the best results for
+From this it looks like an eta value of 0.1 gives the best results for
 this dataset. We can now fit our final model using our tuned hyper
 parameters:
 
 ``` r
 set.seed(111111)
 bst_final <- xgboost(data = dtrain_ins, # Set training data
-              eta = 0.05, # Set learning rate
+              eta = 0.1, # Set learning rate
               max.depth =  15, # Set max depth
               min_child_weight = 1, # Set minimum number of samples in node to split
               gamma = 0, # Set minimum loss reduction for split
