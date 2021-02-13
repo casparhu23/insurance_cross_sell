@@ -1031,14 +1031,14 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency") # MaxSpSe
+                       methods = "MaxSpSe") # MaxSpSe
 
 boost_preds <- predict(bst_final, dtest_ins) # Create predictions for XGBoost model
 
 pred_dat <- cbind.data.frame(boost_preds , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds))
-boost_pred_class[boost_preds >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1
 
 
 t <- table(boost_pred_class, test_subset$new_response) # Create table
@@ -1089,7 +1089,7 @@ plot.roc(roc_1, print.auc = TRUE, col = "red", print.auc.col = "red")
 plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue", print.auc.col = "blue", add = TRUE)
 ```
 
-And naive models still performs a little better than our final model. 
+And naive models (marked in red) still performs a little better than our final model. 
 
 ### Variable Importance with XGBoost - Global Interpretation 
 
