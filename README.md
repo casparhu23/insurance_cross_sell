@@ -1664,14 +1664,14 @@ We can then plot the error rate over different learning rates:
 
 ![](README_files/figure-gfm/eta%20plots-2.png)<!-- -->
 
-From this it looks like an eta value of 0.05 gives the best results for
+From this it looks like an eta value of 0.1 gives the best results for
 this dataset. We can now fit our final model using our tuned hyper
 parameters:
 
 ``` r
 set.seed(111111)
 bst_final <- xgboost(data = dtrain_ins, # Set training data
-              eta = 0.05, # Set learning rate
+              eta = 0.1, # Set learning rate
               max.depth =  15, # Set max depth
               min_child_weight = 1, # Set minimum number of samples in node to split
               gamma = 0, # Set minimum loss reduction for split
@@ -1941,8 +1941,9 @@ Note: Label: 1 means NOInterst Label: 0 means Interest
 plot_explanations(explanation_caret)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> The heatmap
-informed us of vehicle\_insured strong impact versus other variables
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> 
+
+The heatmap informed us of vehicle\_insured strong impact versus other variables
 even just in four cases.
 
 ``` r
