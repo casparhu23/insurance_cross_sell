@@ -301,7 +301,7 @@ library(DMwR) # load the SMOTE dealing with imbalanced data
 smote_data <- SMOTE(Response ~ ., # Set prediction formula
 train_subset, # Set dataset
 perc.over = 100) # Select oversampling for minority class
-summary(smote_data$Response) # check if the proportion of the response variable is the same
+summary(smote_data$Response) 
 
 randomforest_mod <- randomForest(Response ~ ., # Set tree formula
                        data = smote_data, # Set dataset
@@ -971,12 +971,12 @@ g_7
 
 ```
 
-From this it looks like an eta value of 0.05 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
+From this it looks like an eta value of 0.1 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
 
 ```{r fit final xgb model}
 set.seed(111111)
 bst_final <- xgboost(data = dtrain_ins, # Set training data
-              eta = 0.05, # Set learning rate
+              eta = 0.1, # Set learning rate
               max.depth =  15, # Set max depth
               min_child_weight = 1, # Set minimum number of samples in node to split
               gamma = 0, # Set minimum loss reduction for split
