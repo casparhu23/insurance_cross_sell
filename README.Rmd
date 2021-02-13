@@ -468,7 +468,7 @@ confusionMatrix(as.factor(rf_pred_class),
 
 From the confusion matrix, we got better sensitivity 95.47%, which was a little bit higher than the naive random forest model. And it is reasonable that accuracy is 66.45% since we did not choose the parameter that were the best for enhancing accuracy score. Let's keep those scores in mind and we will use XGBoost to build the model to see how it will go. Now, we can plot the variable importance using `varImpPlot`:
 
-The higher mean decrease in Gini, the higher variable importance for that variable would be. Therefore, we can conclude that whether vehicle damaged or not and whether customers already has auto insurance or does not have auto insurance are the most important variables. Next step, we will use XGBoost to build model and see if XGBoost model can perform better than random forest model.
+The higher mean decrease in Gini, the higher variable importance for that variable would be. Therefore, we can conclude that *whether vehicle damaged or not and whether customers already have auto insurance or do not have auto insurance* are the most important variables. Next step, we will use XGBoost to build model and see if XGBoost model can perform better than random forest model.
 
 ```{r random forest variable importance}
 varImpPlot(rf_mod_final)
