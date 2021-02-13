@@ -686,9 +686,9 @@ Note that for this problem we are particularly interested in predicting the posi
 Method 1:
 ```{r}
 #start parallel processing to make machine learning much more efficiently (reduce running time)
-library(doParallel)
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
+# library(doParallel)
+# cl <- makePSOCKcluster(5)
+# registerDoParallel(cl)
 ```
 Method 2:
 ```{r}
@@ -699,6 +699,7 @@ cl <- makeCluster(detectCores() - 1) # save one core only
 registerDoParallel(cl)
 ```
 
+##Tuning the randomforest model using for each
 ```{r}
 library(randomForest)
 library(caret)
@@ -752,11 +753,11 @@ ggplot(res_db, aes(y = mtry, x = nodesize, fill = acc_vec)) + # set aesthetics
 
 ```
 
-##Tuning the randomforest model
+##Tuning the randomforest model with traditional method
 
 ```{r}
 mtry_vals <- c(2, 4, 5, 7, 9, 11, 14)
-nodesize_vals <- c(1, 10, 15, 50, 100, 150, 200, 500, 1000)
+nodesize_vals <- c(1, 10,15, 50, 100, 150, 200, 500, 1000)
 
 params <- expand.grid(mtry_vals, nodesize_vals)
 names(params) <- c("mtry", "nodesize")

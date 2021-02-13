@@ -36,9 +36,11 @@ colnames(train) # check column names for the dataset
 
 ```{r,echo=FALSE}
 library(scales)
-ggplot(train, aes(x=Annual_Premium)) + 
-  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
-  theme_bw() + # Set theme for plot
+library(viridis)
+library(hrbrthemes)
+ggplot(train, aes(x=Annual_Premium, fill=Response)) + 
+  geom_density(alpha = 0.3,adjust=1.5) + # Use geom_density to get density plot
+  theme_ipsum() + # Set theme for plot
   theme(panel.grid.major = element_blank(), # Turn of the background grid
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
@@ -48,9 +50,9 @@ ggplot(train, aes(x=Annual_Premium)) +
   labs(x = "Annual Premium", # Set plot labels
        title = "Density plot of Annual Premium")
 
-ggplot(train, aes(x=Age)) + 
-  geom_density(fill = "blue", alpha = 0.3) + # Use geom_density to get density plot
-  theme_bw() + # Set theme for plot
+ggplot(train, aes(x=Age, fill=Response)) + 
+  geom_density(alpha = 0.3,adjust=1.5) + # Use geom_density to get density plot
+  theme_ipsum() + # Set theme for plot
   theme(panel.grid.major = element_blank(), # Turn of the background grid
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
@@ -384,6 +386,7 @@ foreach_rf <- foreach(i = 1:nrow(tuning_params),
   
     data.frame(acc_vec=c$overall[1], # loop the accuracy results into acc_vec
                sens_vec=c$byClass[1], # loop the sensitivity results into sens_vec
+               spec_vec=c$byClass[2], # loop the specificity results into sens_vec
                mtry=tuning_params[i,"mtry_vals"],
                nodesize=tuning_params[i,"nodesize_vals"])
     
@@ -423,6 +426,21 @@ g_2 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = sens_vec)) + # set aest
   labs(x = "Node Size", y = "Mtry", fill = "OOB Sensitivity") # Set labels
 g_2 # Generate plot
 
+
+g_3 <- ggplot(res_db, aes(y = mtry, x = nodesize, fill = spec_vec)) + # set aesthetics
+  geom_tile() + # Use geom_tile for heatmap
+  theme_bw() + # Set theme
+  scale_fill_gradient2(low = "blue", # Choose low color
+    mid = "white", # Choose mid color
+    high = "red", # Choose high color
+    midpoint =mean(res_db$spec_vec), # Choose mid point
+    space = "Lab", 
+    na.value ="grey", # Choose NA value
+    guide = "colourbar", # Set color bar
+    aesthetics = "fill") + # Select aesthetics to apply
+  labs(x = "Node Size", y = "Mtry", fill = "OOB Specificity")
+
+g_3 # Generate plot
 ```
 
 Since we cannot use one set of parameter to satisfy both accuracy and sensitivity, however 
@@ -461,14 +479,20 @@ library(SHAPforxgboost) # Load shap for XGBoost
 
 Prepare for train and test matrix for XGBoost model
 ```{r}
+smote_data$new_response =0
+smote_data$new_response[smote_data$Response=="Interest"] <- 1
 #create train matrix
 dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), 
-                          label = as.numeric(smote_data$Response) - 1) 
+                          label =smote_data$new_response) 
+
 # Create test matrix
+test_subset$new_response =0
+test_subset$new_response[test_subset$Response=="Interest"] <- 1
 dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
-                         label = as.numeric(test_subset$Response) - 1)
+                         label = test_subset$new_response)
+
 ```
-Note: Label: 1 means NOInterst Label: 0 means Interest
+Note: Label: 0 means NOInterst Label: 1 means Interest
 
 ```{r Train xgboost}
 set.seed(111111)
@@ -490,7 +514,7 @@ Instead of using 0.5 as cut off point, we will use `OptimalCutpoints` package to
 library(OptimalCutpoints) # load package for setting up optimal points
 boost_preds <- predict(bst_initial, dtrain_ins) # Create predictions for xgboost model (dtrain_ins)
 # Join predictions and actual
-pred_dat <- cbind.data.frame(boost_preds, as.numeric(smote_data$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds, smote_data$new_response)
 names(pred_dat) <- c("predictions", "response")
 
 # use train train to determine the best optimal cut point
@@ -498,17 +522,17 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency")
+                       methods = "MaxSpSe")
 
 boost_preds_1 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model (dtest_ins)
 
-pred_dat <- cbind.data.frame(boost_preds_1 , as.numeric(test_subset$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds_1 , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds_1))  #create one column of 0 
-boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds_1 >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1
 # replace those larger than cut off point as 1
 
-t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
+t <- table(boost_pred_class, test_subset$new_response) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
 
@@ -518,18 +542,18 @@ This model predicts 77% accuracy for all correct predictions including true posi
 
 Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
 
-As you may have the question, why not use 0.5 as cut point? I did try with 0.5 as cut point with very low accuracy and sensitivity. Thus we will keep use optimal cut point for later process. 
+As you may have the question, why not use 0.5 as cut point? I did try with 0.5 as cut point with very low accuracy and sensitivity (see below). Thus we will keep use optimal cut point for later process. 
 
 ```{r}
  boost_preds_1_ins05 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
 
- pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$Response)
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response)
 
- boost_pred_class_ins05 <- rep("NOInterest", length(boost_preds_1_ins05))
- boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- "Interest"
+ boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05))
+ boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1
 
  confusionMatrix(as.factor(boost_pred_class_ins05),
-                 test_subset$Response, positive = "Interest")
+                 test_subset$new_response, positive = 1)
 
 # when cutoff point is 0.5, we got very low accuracy and sensitivity rate 
 ```
@@ -983,7 +1007,7 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
               subsample =  0.9, # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 200, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -998,23 +1022,23 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
 ```{r final xgb_preds}
 boost_preds <- predict(bst_final, dtrain_ins) # Create predictions for XGBoost model on training data
 
-pred_dat <- cbind.data.frame(boost_preds, as.numeric(smote_data$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds, smote_data$new_response)
 names(pred_dat) <- c("predictions", "response")
 oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency")
+                       methods = "MaxSpSe")
 
 boost_preds <- predict(bst_final, dtest_ins) # Create predictions for XGBoost model
 
-pred_dat <- cbind.data.frame(boost_preds , as.numeric(test_subset$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds))
-boost_pred_class[boost_preds >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1
 
 
-t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
+t <- table(boost_pred_class, test_subset$new_response) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
 
@@ -1094,7 +1118,7 @@ Here are the actual data for case 1 to case 4 from row 6 to 9 in test_subset:
 test_subset[6:9,15]
 ```
 
-Note: Label: 1 means NOInterst Label: 0 means Interest
+Note: Label: 0 means NOInterst Label: 1 means Interest
 
 ```{r,fig.height=4}
 plot_explanations(explanation_caret)
@@ -1105,9 +1129,9 @@ The heatmap informed us of vehicle_insured strong impact versus other variables 
 plot_features(explanation_caret,ncol=2)
 ```
 
-Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 1 ("NOInterest"), which means customers who did have purchased vehicle insurance will NOT be interested in buying company's vehicle insurance. 
+Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 0 ("NOInterest"), which means customers who did have purchased vehicle insurance will NOT be interested in buying company's vehicle insurance. 
 
 Case 2: Although vehicle_insured_0 is a contradicted variable to the prediction in case 2, model still predicted correctly for case 2. 
 
-Case 3 & 4: We can see that when vehicle_insured_0 is larger than 0.8, our model deemed case response as 0 ("Interest"), which means customers who did not purchase vehicle insurance before will be interested for case three and four; nevertheless, the model's result is contrary to the actual response even with the supportive variable. 
+Case 3 & 4: We can see that when vehicle_insured_0 is larger than 0.8, our model deemed case response as 1 ("Interest"), which means customers who did not purchase vehicle insurance before will be interested for case three and four; nevertheless, the model's result is contrary to the actual response even with the supportive variable. 
 
