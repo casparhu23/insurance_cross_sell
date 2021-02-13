@@ -847,6 +847,10 @@ confusionMatrix(as.factor(rf_pred_class),
 
 Accuracy is 67.81% and sensitivity is 94.78%
 
+```{r}
+varImpPlot(rf_mod_final)
+```
+
 ## XGBoost 
 
 ```{r}

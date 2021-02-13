@@ -449,16 +449,16 @@ we want to predict the positive class corresponding to INTEREST customers, so we
 ```{r}
 set.seed(111111)
 rf_mod_final <- randomForest(Response ~ ., # Set tree formula
-                       data = smote_data, # Set dataset
+                       data = smote_data[,1:15], # Set dataset
                        ntree = 800,
                        nodesize=1000,
-                       mtry=2 
+                       mtry=2
                        ) # Set number of trees to use
 rf_mod_final # final random forest model
 
 rf_preds_final <- predict(rf_mod_final, test_subset, type = "prob") # Create predictions for random forest model
 
-# Convert predictions to classes, using 0.5
+# Convert predictions to classes, using 0.5 rule
 rf_pred_class <- rep("NOInterest", nrow(rf_preds_final))
 rf_pred_class[rf_preds_final[,1] >= 0.5] <- "Interest"
 
@@ -466,8 +466,13 @@ confusionMatrix(as.factor(rf_pred_class),
                 test_subset$Response, positive = "Interest") 
 ```
 
-From the confusion matrix, we got better sensitivity 95.47%, which was a little bit higher than the naive random forest model. And it is reasonable that accuracy is 66.45% since we did not choose the parameter that were the best for enhancing accuracy score. Let's keep those scores in mind and we will use XGBoost to build the model to see how it will go. 
+From the confusion matrix, we got better sensitivity 95.47%, which was a little bit higher than the naive random forest model. And it is reasonable that accuracy is 66.45% since we did not choose the parameter that were the best for enhancing accuracy score. Let's keep those scores in mind and we will use XGBoost to build the model to see how it will go. Now, we can plot the variable importance using `varImpPlot`:
 
+The higher mean decrease in Gini, the higher variable importance for that variable would be. Therefore, we can conclude that whether vehicle damaged or not and whether customers already has auto insurance or does not have auto insurance are the most important variables. Next step, we will use XGBoost to build model and see if XGBoost model can perform better than random forest model.
+
+```{r random forest variable importance}
+varImpPlot(rf_mod_final)
+```
 ## XGBoost 
 
 ```{r}
@@ -508,9 +513,9 @@ bst_initial <- xgboost(data = dtrain_ins, # Set training data
                eval_metric = "error") # Set evaluation metric to use
 ```
 
-Instead of using 0.5 as cut off point, we will use `OptimalCutpoints` package to decide which is the best optimal points for our confusion matrix
+we will use `OptimalCutpoints` package and `0.5 cutpoint rule`to decide which is the best optimal points for our confusion matrix
 
-```{r xbgoost predictions}
+```{r xbgoost optimalcutpoints }
 library(OptimalCutpoints) # load package for setting up optimal points
 boost_preds <- predict(bst_initial, dtrain_ins) # Create predictions for xgboost model (dtrain_ins)
 # Join predictions and actual
@@ -522,29 +527,21 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxSpSe")
+                       methods = "MaxEfficiency")  #MaxSpSe
 
 boost_preds_1 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model (dtest_ins)
 
 pred_dat <- cbind.data.frame(boost_preds_1 , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds_1))  #create one column of 0 
-boost_pred_class[boost_preds_1 >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1 
 # replace those larger than cut off point as 1
 
 t <- table(boost_pred_class, test_subset$new_response) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
 
-For our original XGBoost model we have 77% accuracy and 78.88% sensitivity. We hope we can enhance accuracy rate and sensitivity rate by tuning the model. 
-
-This model predicts 77% accuracy for all correct predictions including true positive and true negative and predicts 78.88% sensitivity for actual interested customers are correctly predicted as interested
-
-Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST customers, so we will look at sensitivity as well as overall accuracy.
-
-As you may have the question, why not use 0.5 as cut point? I did try with 0.5 as cut point with very low accuracy and sensitivity (see below). Thus we will keep use optimal cut point for later process. 
-
-```{r}
+```{r 0.5 cutpoint rule}
  boost_preds_1_ins05 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
 
  pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response)
@@ -552,11 +549,17 @@ As you may have the question, why not use 0.5 as cut point? I did try with 0.5 a
  boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05))
  boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1
 
- confusionMatrix(as.factor(boost_pred_class_ins05),
-                 test_subset$new_response, positive = 1)
+ t <- table(boost_pred_class_ins05, test_subset$new_response) # Create table
+ confusionMatrix(t, positive = "1")
 
-# when cutoff point is 0.5, we got very low accuracy and sensitivity rate 
 ```
+
+It seems that `0.5% cutpoint rule` performed better on sensitivity(83.29%) and specificity(71.01%). 
+We hope we can enhance sensitivity rate and specificity rate by tuning the model. 
+
+This model predicts 83.29% sensitivity for actual interested customers are correctly predicted as interested and 71.01% specificity for actual non interested customers are correctly predicted as non interested.
+
+Note that for this problem we are particularly interested in predicting the positive class corresponding to INTEREST("1") customers, so we will look at sensitivity as well as overall accuracy.
 
 Visualize and decide the optimal number of iterations for XGBoost
 ```{r}
@@ -1019,7 +1022,7 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
               eval_metric = "error") # Set evaluation metric to use
 ```
 
-```{r final xgb_preds}
+```{r final xgb_preds optimal cutpoint}
 boost_preds <- predict(bst_final, dtrain_ins) # Create predictions for XGBoost model on training data
 
 pred_dat <- cbind.data.frame(boost_preds, smote_data$new_response)
@@ -1028,19 +1031,43 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxSpSe")
+                       methods = "MaxEfficiency") # MaxSpSe
 
 boost_preds <- predict(bst_final, dtest_ins) # Create predictions for XGBoost model
 
 pred_dat <- cbind.data.frame(boost_preds , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds))
-boost_pred_class[boost_preds >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
 
 
 t <- table(boost_pred_class, test_subset$new_response) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
+
+
+```{r}
+boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xgboost model
+
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_2_ins05, test_subset$new_response)
+
+ boost_pred_class_2_ins05 <- rep(0, length(boost_preds_2_ins05))
+ boost_pred_class_2_ins05[boost_preds_2_ins05 >= 0.5] <- 1
+
+ t <- table(boost_pred_class_2_ins05, test_subset$new_response) # Create table
+ confusionMatrix(t, positive = "1")
+
+```
+
+
+
+
+
+
+
+
+
+
 
 As you may recall that our original XGBoost model's accuracy is 77% and sensitivity is 78.88%, but now we have 75.7% and 76.92% for accuracy and sensitivity. The slight decreasing percentages on both stats show us that sometimes the orginal XGBoost setting works for the best. That also concludes why programmers who created XGBoost model set those initial parameters as the standard.  
 
