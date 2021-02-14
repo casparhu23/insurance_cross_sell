@@ -2062,11 +2062,17 @@ the following traits to maximize cross sell revenue on auto insurance.
 
 • Have driving license already and do not have auto insurance yet o Send
 customers advertisements of auto insurance Immediately 
+
 • Owned older vehicles (&gt; 2 years) 
+    
     o Set price level strategically based on the age of vehicles 
+
 • Damaged his/her vehicles in the past 
+    
     o Set price level strategically based on damage frequency and damage level 
+
 • Male customers 
+    
     o Make customized advertisements toward males customers
 especially 
 
@@ -2074,14 +2080,20 @@ Insurance company should further analyze the following
 regions: 
 
 • Top 2: Region 8 and 28: 
-o Identify the peak age groups: 26,48, 53, 67 and 72 years old; Annual premium 25K to 75K (majority); mean premium around 37K 
-o Research the successful elements ex: manager effectiveness, advertisements, geographical information, etc.
-o Promote successful elements/model to other similar regions 
+
+    o Identify the peak age groups: 26,48, 53, 67 and 72 years old; Annual premium 25K to 75K (majority); mean premium around 37K 
+
+    o Research the successful elements ex: manager effectiveness, advertisements, geographical information, etc.
+
+    o Promote successful elements/model to other similar regions 
     
 • Bottom 2: Region 31 and 48: 
-o Figure out the reasons why only a few samples from those two regions 
-o Investigate the reasons of low annual premium quotes 
-o Adjust sales strategy based on further analysis
+
+    o Figure out the reasons why only a few samples from those two regions 
+
+    o Investigate the reasons of low annual premium quotes 
+
+    o Adjust sales strategy based on further analysis
 
 ## Considerations
 
