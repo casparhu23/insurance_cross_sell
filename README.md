@@ -2060,8 +2060,9 @@ actual response even with the supportive variable.
 Insurance company should make advertisements towards customers who have
 the following traits to maximize cross sell revenue on auto insurance. 
 
-• Have driving license already and do not have auto insurance yet o Send
-customers advertisements of auto insurance Immediately 
+• Have driving license already and do not have auto insurance yet 
+
+    o Send customers advertisements of auto insurance Immediately 
 
 • Owned older vehicles (&gt; 2 years) 
     
