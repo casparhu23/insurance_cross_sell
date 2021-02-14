@@ -674,11 +674,7 @@ summary(riModP)
 
 ``` r
 library(sjPlot)
-```
 
-    ## Learn more about sjPlot with 'browseVignettes("sjPlot")'.
-
-``` r
 plot_model(riMod, type = "re") + 
   theme_minimal()
 ```
@@ -1481,6 +1477,16 @@ bst <- xgb.cv(data = dtrain_ins, # Set training data
               eval_metric = "error") # Set evaluation metric to use
 ```
 
+``` r
+ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
+  geom_point()+
+  geom_smooth()
+```
+
+    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
+
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
 From the result we see the optimal number of trees to use with our
 current set of parameters is 300 so we are still fitting an appropriate
 number of trees. We will change number of trees to 450 instead of 500.
@@ -1706,7 +1712,7 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
               subsample =  0.9, # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 200, # Set number of rounds
+              nrounds = 300, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1745,26 +1751,26 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
     ## 
     ##                 
     ## boost_pred_class     0     1
-    ##                0 13524   791
-    ##                1  4004  1681
+    ##                0 13399   774
+    ##                1  4129  1698
     ##                                           
-    ##                Accuracy : 0.7602          
-    ##                  95% CI : (0.7543, 0.7662)
+    ##                Accuracy : 0.7548          
+    ##                  95% CI : (0.7488, 0.7608)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.2898          
+    ##                   Kappa : 0.2851          
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.68002         
-    ##             Specificity : 0.77157         
-    ##          Pos Pred Value : 0.29569         
-    ##          Neg Pred Value : 0.94474         
-    ##              Prevalence : 0.12360         
-    ##          Detection Rate : 0.08405         
-    ##    Detection Prevalence : 0.28425         
-    ##       Balanced Accuracy : 0.72579         
+    ##             Sensitivity : 0.6869          
+    ##             Specificity : 0.7644          
+    ##          Pos Pred Value : 0.2914          
+    ##          Neg Pred Value : 0.9454          
+    ##              Prevalence : 0.1236          
+    ##          Detection Rate : 0.0849          
+    ##    Detection Prevalence : 0.2913          
+    ##       Balanced Accuracy : 0.7257          
     ##                                           
     ##        'Positive' Class : 1               
     ## 
@@ -1785,26 +1791,26 @@ boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xg
     ## 
     ##                         
     ## boost_pred_class_2_ins05     0     1
-    ##                        0 12793   553
-    ##                        1  4735  1919
+    ##                        0 12946   632
+    ##                        1  4582  1840
     ##                                           
-    ##                Accuracy : 0.7356          
-    ##                  95% CI : (0.7294, 0.7417)
+    ##                Accuracy : 0.7393          
+    ##                  95% CI : (0.7332, 0.7454)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.2932          
+    ##                   Kappa : 0.2864          
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.77629         
-    ##             Specificity : 0.72986         
-    ##          Pos Pred Value : 0.28840         
-    ##          Neg Pred Value : 0.95856         
-    ##              Prevalence : 0.12360         
-    ##          Detection Rate : 0.09595         
-    ##    Detection Prevalence : 0.33270         
-    ##       Balanced Accuracy : 0.75308         
+    ##             Sensitivity : 0.7443          
+    ##             Specificity : 0.7386          
+    ##          Pos Pred Value : 0.2865          
+    ##          Neg Pred Value : 0.9535          
+    ##              Prevalence : 0.1236          
+    ##          Detection Rate : 0.0920          
+    ##    Detection Prevalence : 0.3211          
+    ##       Balanced Accuracy : 0.7415          
     ##                                           
     ##        'Positive' Class : 1               
     ## 
@@ -1890,7 +1896,7 @@ shap_long = shap.prep(shap = shap_result, as.matrix(smote_data[,1:14]), top_n = 
 plot.shap.summary(data_long = shap_long)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 From the SHAP graph we can see that the customers who did have vehicle
 insurance will be less likely to purchase company’s vehicle insurance.
@@ -2013,7 +2019,7 @@ Note: Label: 0 means NOInterst Label: 1 means Interest
 plot_explanations(explanation_caret)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> The heatmap
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- --> The heatmap
 informed us of vehicle\_insured strong impact versus other variables
 even just in four cases.
 
@@ -2021,7 +2027,7 @@ even just in four cases.
 plot_features(explanation_caret,ncol=2)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 Case 1: When vehicle\_insured\_0 is less than 0.2, our model deemed case
 response as 0 (“NOInterest”), which means customers who did have

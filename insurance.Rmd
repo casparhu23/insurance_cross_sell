@@ -731,7 +731,7 @@ foreach_rf <- foreach(i = 1:nrow(tuning_params),
     
   }
 # do.call("rbind", results)
-stopCluster(cl) # stop parallel processing
+
 ```
 
 ```{r Visualise Tuning }
@@ -1380,6 +1380,7 @@ g_7 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
        y = "Error Rate", color = "Learning \n Rate")  # Set labels
 g_7
 
+stopCluster(cl) # stop parallel processing
 ```
 
 From this it looks like an eta value of 0.1 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:

@@ -746,6 +746,13 @@ bst <- xgb.cv(data = dtrain_ins, # Set training data
               eval_metric = "error") # Set evaluation metric to use
 ```
 
+```{r}
+ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
+  geom_point()+
+  geom_smooth()
+```
+
+
 From the result we see the optimal number of trees to use with our current set of parameters is 300 so we are still fitting an appropriate number of trees. We will change number of trees to 450 instead of 500.
 
 We will now tune the `subsample` and `colsample_by_tree` parameters:
@@ -995,7 +1002,7 @@ g_7 <- ggplot(plot_data, aes(x = iter, y = test_error_mean, color = eta))+
        y = "Error Rate", color = "Learning \n Rate")  # Set labels
 g_7
 
-
+stopCluster(cl)
 ```
 
 From this it looks like an eta value of 0.1 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
