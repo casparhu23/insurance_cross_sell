@@ -117,6 +117,24 @@ colnames(train) # check column names for the dataset
     ##  [7] "Vehicle_Age"          "Vehicle_Damage"       "Annual_Premium"      
     ## [10] "Policy_Sales_Channel" "Vintage"              "Response"
 
+``` r
+train <- train%>%
+  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
+  mutate(id=as.character(id),
+         Gender=as.factor(Gender),
+         Driving_License=as.factor(Driving_License),
+         Vehicle_Insured=as.factor(Vehicle_Insured),
+         Vehicle_Age=as.factor(Vehicle_Age),
+         Vehicle_Damage=as.factor(Vehicle_Damage),
+         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
+         Region_Code=as.factor(as.character(Region_Code)),
+         Response=as.factor(as.character(Response)))
+
+train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
+```
+
+### Density Plot
+
     ## 
     ## Attaching package: 'scales'
 
@@ -143,23 +161,7 @@ colnames(train) # check column names for the dataset
 
     ##       if Arial Narrow is not on your system, please see https://bit.ly/arialnarrow
 
-![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
-
-``` r
-train <- train%>%
-  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
-  mutate(id=as.character(id),
-         Gender=as.factor(Gender),
-         Driving_License=as.factor(Driving_License),
-         Vehicle_Insured=as.factor(Vehicle_Insured),
-         Vehicle_Age=as.factor(Vehicle_Age),
-         Vehicle_Damage=as.factor(Vehicle_Damage),
-         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
-         Region_Code=as.factor(as.character(Region_Code)),
-         Response=as.factor(as.character(Response)))
-
-train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
-```
+![](README_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-4-2.png)<!-- -->
 
 ## Correlation between Numeric Variables
 
@@ -674,7 +676,11 @@ summary(riModP)
 
 ``` r
 library(sjPlot)
+```
 
+    ## #refugeeswelcome
+
+``` r
 plot_model(riMod, type = "re") + 
   theme_minimal()
 ```
@@ -1157,16 +1163,16 @@ library(SHAPforxgboost) # Load shap for XGBoost
 Prepare for train and test matrix for XGBoost model
 
 ``` r
-smote_data$new_response =0
-smote_data$new_response[smote_data$Response=="Interest"] <- 1
+smote_data$new_response =0 # set a new column to store numeric version of response 
+smote_data$new_response[smote_data$Response=="Interest"] <- 1 # change "Interest" to 1
 #create train matrix
-dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), 
+dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), # set matrix
                           label =smote_data$new_response) 
 
 # Create test matrix
-test_subset$new_response =0
-test_subset$new_response[test_subset$Response=="Interest"] <- 1
-dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
+test_subset$new_response =0 # set a new column to store numeric version of response 
+test_subset$new_response[test_subset$Response=="Interest"] <- 1 # change "Interest" to 1
+dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), # set matrix
                          label = test_subset$new_response)
 ```
 
@@ -1208,14 +1214,14 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency")  #MaxSpSe
+                       methods = "MaxSpSe")  
 
 boost_preds_1 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model (dtest_ins)
 
 pred_dat <- cbind.data.frame(boost_preds_1 , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds_1))  #create one column of 0 
-boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1 
+boost_pred_class[boost_preds_1 >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1 
 # replace those larger than cut off point as 1
 
 t <- table(boost_pred_class, test_subset$new_response) # Create table
@@ -1226,26 +1232,26 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
     ## 
     ##                 
     ## boost_pred_class     0     1
-    ##                0 13570   757
-    ##                1  3958  1715
+    ##                0 13869   852
+    ##                1  3659  1620
     ##                                           
-    ##                Accuracy : 0.7642          
-    ##                  95% CI : (0.7583, 0.7701)
+    ##                Accuracy : 0.7744          
+    ##                  95% CI : (0.7686, 0.7802)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.3007          
+    ##                   Kappa : 0.3002          
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.69377         
-    ##             Specificity : 0.77419         
-    ##          Pos Pred Value : 0.30231         
-    ##          Neg Pred Value : 0.94716         
-    ##              Prevalence : 0.12360         
-    ##          Detection Rate : 0.08575         
-    ##    Detection Prevalence : 0.28365         
-    ##       Balanced Accuracy : 0.73398         
+    ##             Sensitivity : 0.6553          
+    ##             Specificity : 0.7912          
+    ##          Pos Pred Value : 0.3069          
+    ##          Neg Pred Value : 0.9421          
+    ##              Prevalence : 0.1236          
+    ##          Detection Rate : 0.0810          
+    ##    Detection Prevalence : 0.2640          
+    ##       Balanced Accuracy : 0.7233          
     ##                                           
     ##        'Positive' Class : 1               
     ## 
@@ -1253,13 +1259,13 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
 ``` r
  boost_preds_1_ins05 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
 
- pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response)
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response) # col bind data 
 
- boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05))
- boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1
+ boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05)) # make a vector
+ boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1 # set prediction 0.5 above as 1 
 
  t <- table(boost_pred_class_ins05, test_subset$new_response) # Create table
- confusionMatrix(t, positive = "1")
+ confusionMatrix(t, positive = "1") # set confusion matrix
 ```
 
     ## Confusion Matrix and Statistics
@@ -1337,8 +1343,8 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
 
 ![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
-Based on the graph and results, the optimal number of iterations is 402.
-We will set the number of iterations to 500
+Based on the graph and results, the optimal number of iterations is
+around 400. We will set the number of iterations to 500
 
 ## Tuning the XGBoost model
 
@@ -1449,8 +1455,8 @@ cbind.data.frame(gamma_vals, auc_vec, error_vec)
     ## 5       0.20 0.9108096 0.1687622
 
 It seems that a `gamma` value of 0 gives us the highest accuracy rate
-(auc\_vec) and lowest error rate. Before we proceed lets re-calibrate
-the number of rounds to use for an optimal model here:
+(auc\_vec) and relatively lower error rate. Before we proceed lets
+re-calibrate the number of rounds to use for an optimal model here:
 
 ``` r
 # Use xgb.cv to run cross-validation inside xgboost
@@ -1488,8 +1494,9 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
 ![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 From the result we see the optimal number of trees to use with our
-current set of parameters is 300 so we are still fitting an appropriate
-number of trees. We will change number of trees to 450 instead of 500.
+current set of parameters is around 400 so we are still fitting an
+appropriate number of trees. We will change number of trees to 400
+instead of 500.
 
 We will now tune the `subsample` and `colsample_by_tree` parameters:
 
@@ -1516,7 +1523,7 @@ for(i in 1:nrow(cv_params)){
               subsample = cv_params$subsample[i], # Set proportion of training data to use in tree
               colsample_bytree = cv_params$colsample_by_tree[i], # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1586,7 +1593,7 @@ bst_mod_1 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9, # Set proportion of training data to use in tree
               colsample_bytree =  0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1610,7 +1617,7 @@ bst_mod_2 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1633,7 +1640,7 @@ bst_mod_3 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree =  0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1655,7 +1662,7 @@ bst_mod_4 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1678,7 +1685,7 @@ bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1698,14 +1705,14 @@ We can then plot the error rate over different learning rates:
 
 ![](README_files/figure-gfm/eta%20plots-2.png)<!-- -->
 
-From this it looks like an eta value of 0.1 gives the best results for
+From this it looks like an eta value of 0.05 gives the best results for
 this dataset. We can now fit our final model using our tuned hyper
 parameters:
 
 ``` r
 set.seed(111111)
 bst_final <- xgboost(data = dtrain_ins, # Set training data
-              eta = 0.1, # Set learning rate
+              eta = 0.05, # Set learning rate
               max.depth =  15, # Set max depth
               min_child_weight = 1, # Set minimum number of samples in node to split
               gamma = 0, # Set minimum loss reduction for split
@@ -1751,26 +1758,26 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
     ## 
     ##                 
     ## boost_pred_class     0     1
-    ##                0 13399   774
-    ##                1  4129  1698
+    ##                0 13622   787
+    ##                1  3906  1685
     ##                                           
-    ##                Accuracy : 0.7548          
-    ##                  95% CI : (0.7488, 0.7608)
+    ##                Accuracy : 0.7654          
+    ##                  95% CI : (0.7594, 0.7712)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.2851          
+    ##                   Kappa : 0.2976          
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.6869          
-    ##             Specificity : 0.7644          
-    ##          Pos Pred Value : 0.2914          
-    ##          Neg Pred Value : 0.9454          
-    ##              Prevalence : 0.1236          
-    ##          Detection Rate : 0.0849          
-    ##    Detection Prevalence : 0.2913          
-    ##       Balanced Accuracy : 0.7257          
+    ##             Sensitivity : 0.68163         
+    ##             Specificity : 0.77716         
+    ##          Pos Pred Value : 0.30138         
+    ##          Neg Pred Value : 0.94538         
+    ##              Prevalence : 0.12360         
+    ##          Detection Rate : 0.08425         
+    ##    Detection Prevalence : 0.27955         
+    ##       Balanced Accuracy : 0.72940         
     ##                                           
     ##        'Positive' Class : 1               
     ## 
@@ -1791,38 +1798,38 @@ boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xg
     ## 
     ##                         
     ## boost_pred_class_2_ins05     0     1
-    ##                        0 12946   632
-    ##                        1  4582  1840
+    ##                        0 12643   493
+    ##                        1  4885  1979
     ##                                           
-    ##                Accuracy : 0.7393          
-    ##                  95% CI : (0.7332, 0.7454)
+    ##                Accuracy : 0.7311          
+    ##                  95% CI : (0.7249, 0.7372)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.2864          
+    ##                   Kappa : 0.296           
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.7443          
-    ##             Specificity : 0.7386          
-    ##          Pos Pred Value : 0.2865          
-    ##          Neg Pred Value : 0.9535          
-    ##              Prevalence : 0.1236          
-    ##          Detection Rate : 0.0920          
-    ##    Detection Prevalence : 0.3211          
-    ##       Balanced Accuracy : 0.7415          
+    ##             Sensitivity : 0.80057         
+    ##             Specificity : 0.72130         
+    ##          Pos Pred Value : 0.28832         
+    ##          Neg Pred Value : 0.96247         
+    ##              Prevalence : 0.12360         
+    ##          Detection Rate : 0.09895         
+    ##    Detection Prevalence : 0.34320         
+    ##       Balanced Accuracy : 0.76093         
     ##                                           
     ##        'Positive' Class : 1               
     ## 
 
-As you may recall that our original XGBoost model’s accuracy is 77% and
-sensitivity is 78.88%, but now we have 75.7% and 76.92% for accuracy and
-sensitivity. The slight decreasing percentages on both stats show us
-that sometimes the orginal XGBoost setting works for the best. That also
-concludes why programmers who created XGBoost model set those initial
-parameters as the standard.
+As you may recall that our original XGBoost model’s sensitivity is
+83.29% and specificity is 71.01%, but now we have 80.06% and 72.13% for
+accuracy and sensitivity. The slight decreasing percentages on both
+stats show us that sometimes the orginal XGBoost setting works for the
+best. That also concludes why programmers who created XGBoost model set
+those initial parameters as the standard.
 
-The winner of two models will be random forest based on the nearly 15%
+The winner of two models will be random forest based on the nearly 12%
 gap between the sensitivity score.
 
 ### Compare methods
@@ -2030,9 +2037,10 @@ plot_features(explanation_caret,ncol=2)
 ![](README_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 Case 1: When vehicle\_insured\_0 is less than 0.2, our model deemed case
-response as 0 (“NOInterest”), which means customers who did have
-purchased vehicle insurance will NOT be interested in buying company’s
-vehicle insurance.
+response as 0 (“NOInterest”), which means this customer who did have
+purchased vehicle insurance is less likely to be interested in buying
+company’s vehicle insurance. Our model predicted Case 1 successfully as
+no interest.
 
 Case 2: Although vehicle\_insured\_0 is a contradicted variable to the
 prediction in case 2, model still predicted correctly for case 2.
@@ -2042,3 +2050,32 @@ our model deemed case response as 1 (“Interest”), which means customers
 who did not purchase vehicle insurance before will be interested for
 case three and four; nevertheless, the model’s result is contrary to the
 actual response even with the supportive variable.
+
+## Recommendations
+
+Insurance company should make advertisements towards customers who have
+the following traits to maximize cross sell revenue on auto insurance. •
+Have driving license already and do not have auto insurance yet o Send
+customers advertisements of auto insurance Immediately • Owned older
+vehicles (&gt; 2 years) o Set price level strategically based on the age
+of vehicles • Damaged his/her vehicles in the past o Set price level
+strategically based on damage frequency and damage level • Male
+customers o Make customized advertisements toward males customers
+especially Insurance company should further analyze the following
+regions: • Top 2: Region 8 and 28: o Identify the peak age groups: 26,
+48, 53, 67 and 72 years old; Annual premium 25K to 75K (majority); mean
+premium around 37K o Research the successful elements ex: manager
+effectiveness, advertisements, geographical information, etc. o Promote
+successful elements/model to other similar regions • Bottom 2: Region 31
+and 48: o Figure out the reasons why only a few samples from those two
+regions o Investigate the reasons of low annual premium quotes o Adjust
+sales strategy based on further analysis
+
+## Considerations
+
+We did not spend too much time on policy sales channel, because we would
+not know what each code stand for. Insurance company can use group by
+each channel and analyze them further. While we do not know exactly
+whether the vehicle insurance that were bought already are from
+competitors or this company itself. We assume all the vehicle insurance
+that were bought already from the competitors.

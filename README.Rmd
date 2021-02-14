@@ -314,7 +314,7 @@ summary(smote_data$Response)
 
 randomforest_mod <- randomForest(Response ~ ., # Set tree formula
                        data = smote_data, # Set dataset
-                       ntree = 1500,
+                       ntree = 1000,
                        ) # Set number of trees to use
 randomforest_mod
 ```
