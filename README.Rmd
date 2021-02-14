@@ -34,6 +34,24 @@ summary(train)
 colnames(train) # check column names for the dataset
 ```
 
+```{r}
+train <- train%>%
+  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
+  mutate(id=as.character(id),
+         Gender=as.factor(Gender),
+         Driving_License=as.factor(Driving_License),
+         Vehicle_Insured=as.factor(Vehicle_Insured),
+         Vehicle_Age=as.factor(Vehicle_Age),
+         Vehicle_Damage=as.factor(Vehicle_Damage),
+         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
+         Region_Code=as.factor(as.character(Region_Code)),
+         Response=as.factor(as.character(Response)))
+
+train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
+```
+
+### Density Plot
+
 ```{r,echo=FALSE}
 library(scales)
 library(viridis)
@@ -68,21 +86,6 @@ ggplot(train, aes(x=Age, group=Response, fill=Response)) +
   scale_fill_discrete(name = "Response", labels = c("Not Interested", "Interested"))
 ```
 
-```{r}
-train <- train%>%
-  rename(Vehicle_Insured=Previously_Insured)%>%  #change the column name to vehicle_insured 
-  mutate(id=as.character(id),
-         Gender=as.factor(Gender),
-         Driving_License=as.factor(Driving_License),
-         Vehicle_Insured=as.factor(Vehicle_Insured),
-         Vehicle_Age=as.factor(Vehicle_Age),
-         Vehicle_Damage=as.factor(Vehicle_Damage),
-         Policy_Sales_Channel=as.factor(as.character(Policy_Sales_Channel)),
-         Region_Code=as.factor(as.character(Region_Code)),
-         Response=as.factor(as.character(Response)))
-
-train$Vehicle_Age <-  fct_relevel(train$Vehicle_Age,"< 1 Year","1-2 Year","> 2 Years") #reorder level
-```
 
 ## Correlation between Numeric Variables
 
@@ -181,8 +184,6 @@ Male customers are about 9.5% likely to be interested in the vehicle insurance t
 Customers with driving license are about 231.7% likely to be interested in the vehicle insurance.
 Older vehicles(elder than 2 years) are about 331% likely to be interested in the vehicle insurance.
 Damaged vehicles are about 658.7% likely to be interested in the vehicle insurance.
-
-
 
 ## Mixed Models
 ```{r}
@@ -313,7 +314,7 @@ summary(smote_data$Response)
 
 randomforest_mod <- randomForest(Response ~ ., # Set tree formula
                        data = smote_data, # Set dataset
-                       ntree = 1000,
+                       ntree = 1500,
                        ) # Set number of trees to use
 randomforest_mod
 ```
@@ -490,16 +491,16 @@ library(SHAPforxgboost) # Load shap for XGBoost
 
 Prepare for train and test matrix for XGBoost model
 ```{r}
-smote_data$new_response =0
-smote_data$new_response[smote_data$Response=="Interest"] <- 1
+smote_data$new_response =0 # set a new column to store numeric version of response 
+smote_data$new_response[smote_data$Response=="Interest"] <- 1 # change "Interest" to 1
 #create train matrix
-dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), 
+dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), # set matrix
                           label =smote_data$new_response) 
 
 # Create test matrix
-test_subset$new_response =0
-test_subset$new_response[test_subset$Response=="Interest"] <- 1
-dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
+test_subset$new_response =0 # set a new column to store numeric version of response 
+test_subset$new_response[test_subset$Response=="Interest"] <- 1 # change "Interest" to 1
+dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), # set matrix
                          label = test_subset$new_response)
 
 ```
@@ -533,14 +534,14 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency")  #MaxSpSe
+                       methods = "MaxSpSe")  
 
 boost_preds_1 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model (dtest_ins)
 
 pred_dat <- cbind.data.frame(boost_preds_1 , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds_1))  #create one column of 0 
-boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1 
+boost_pred_class[boost_preds_1 >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1 
 # replace those larger than cut off point as 1
 
 t <- table(boost_pred_class, test_subset$new_response) # Create table
@@ -550,13 +551,13 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```{r 0.5 cutpoint rule}
  boost_preds_1_ins05 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
 
- pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response)
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response) # col bind data 
 
- boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05))
- boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1
+ boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05)) # make a vector
+ boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1 # set prediction 0.5 above as 1 
 
  t <- table(boost_pred_class_ins05, test_subset$new_response) # Create table
- confusionMatrix(t, positive = "1")
+ confusionMatrix(t, positive = "1") # set confusion matrix
 
 ```
 
@@ -596,7 +597,7 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
   geom_smooth()
 ```
 
-Based on the graph and results, the optimal number of iterations is 402. We will set the number of iterations to 500
+Based on the graph and results, the optimal number of iterations is around 400. We will set the number of iterations to 500
 
 ## Tuning the XGBoost model
 
@@ -724,8 +725,7 @@ Lets view our results to identify the value of `gamma` to use:
 cbind.data.frame(gamma_vals, auc_vec, error_vec)
 ```
 
-It seems that a `gamma` value of 0 gives us the highest accuracy rate (auc_vec) and lowest error rate.
-Before we proceed lets re-calibrate the number of rounds to use for an optimal model here:
+It seems that a `gamma` value of 0 gives us the highest accuracy rate (auc_vec) and relatively lower error rate. Before we proceed lets re-calibrate the number of rounds to use for an optimal model here:
 
 ```{r choose xgboost tree number 2}
 # Use xgb.cv to run cross-validation inside xgboost
@@ -759,7 +759,7 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
 ```
 
 
-From the result we see the optimal number of trees to use with our current set of parameters is 300 so we are still fitting an appropriate number of trees. We will change number of trees to 450 instead of 500.
+From the result we see the optimal number of trees to use with our current set of parameters is around 400 so we are still fitting an appropriate number of trees. We will change number of trees to 400 instead of 500.
 
 We will now tune the `subsample` and `colsample_by_tree` parameters:
 
@@ -786,7 +786,7 @@ for(i in 1:nrow(cv_params)){
               subsample = cv_params$subsample[i], # Set proportion of training data to use in tree
               colsample_bytree = cv_params$colsample_by_tree[i], # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -862,7 +862,7 @@ bst_mod_1 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9, # Set proportion of training data to use in tree
               colsample_bytree =  0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -886,7 +886,7 @@ bst_mod_2 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -909,7 +909,7 @@ bst_mod_3 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree =  0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -931,7 +931,7 @@ bst_mod_4 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -954,7 +954,7 @@ bst_mod_5 <- xgb.cv(data = dtrain_ins, # Set training data
               subsample = 0.9 , # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 400, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1081,9 +1081,9 @@ boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xg
 
 
 
-As you may recall that our original XGBoost model's accuracy is 77% and sensitivity is 78.88%, but now we have 75.7% and 76.92% for accuracy and sensitivity. The slight decreasing percentages on both stats show us that sometimes the orginal XGBoost setting works for the best. That also concludes why programmers who created XGBoost model set those initial parameters as the standard.  
+As you may recall that our original XGBoost model's sensitivity is 83.29% and specificity is 71.01%, but now we have 80.06% and 72.13% for accuracy and sensitivity. The slight decreasing percentages on both stats show us that sometimes the orginal XGBoost setting works for the best. That also concludes why programmers who created XGBoost model set those initial parameters as the standard.  
 
-The winner of two models will be random forest based on the nearly 15% gap between the sensitivity score.
+The winner of two models will be random forest based on the nearly 12% gap between the sensitivity score.
 
 ### Compare methods
 
@@ -1168,7 +1168,7 @@ The heatmap informed us of vehicle_insured strong impact versus other variables 
 plot_features(explanation_caret,ncol=2)
 ```
 
-Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 0 ("NOInterest"), which means customers who did have purchased vehicle insurance will NOT be interested in buying company's vehicle insurance. 
+Case 1: When vehicle_insured_0 is less than 0.2, our model deemed case response as 0 ("NOInterest"), which means this customer who did have purchased vehicle insurance is less likely to be interested in buying company's vehicle insurance. Our model predicted Case 1 successfully as no interest.
 
 Case 2: Although vehicle_insured_0 is a contradicted variable to the prediction in case 2, model still predicted correctly for case 2. 
 
