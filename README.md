@@ -128,6 +128,21 @@ colnames(train) # check column names for the dataset
     ## 
     ##     col_factor
 
+    ## Loading required package: viridisLite
+
+    ## 
+    ## Attaching package: 'viridis'
+
+    ## The following object is masked from 'package:scales':
+    ## 
+    ##     viridis_pal
+
+    ## NOTE: Either Arial Narrow or Roboto Condensed fonts are required to use these themes.
+
+    ##       Please use hrbrthemes::import_roboto_condensed() to install Roboto Condensed and
+
+    ##       if Arial Narrow is not on your system, please see https://bit.ly/arialnarrow
+
 ![](README_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->![](README_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
 
 ``` r
@@ -659,7 +674,11 @@ summary(riModP)
 
 ``` r
 library(sjPlot)
+```
 
+    ## Learn more about sjPlot with 'browseVignettes("sjPlot")'.
+
+``` r
 plot_model(riMod, type = "re") + 
   theme_minimal()
 ```
@@ -846,7 +865,7 @@ library(DMwR) # load the SMOTE dealing with imbalanced data
 smote_data <- SMOTE(Response ~ ., # Set prediction formula
 train_subset, # Set dataset
 perc.over = 100) # Select oversampling for minority class
-summary(smote_data$Response) # check if the proportion of the response variable is the same
+summary(smote_data$Response) 
 ```
 
     ##   Interest NOInterest 
@@ -1004,13 +1023,14 @@ foreach_rf <- foreach(i = 1:nrow(tuning_params),
   
     data.frame(acc_vec=c$overall[1], # loop the accuracy results into acc_vec
                sens_vec=c$byClass[1], # loop the sensitivity results into sens_vec
+               spec_vec=c$byClass[2], # loop the specificity results into sens_vec
                mtry=tuning_params[i,"mtry_vals"],
                nodesize=tuning_params[i,"nodesize_vals"])
     
   }
 ```
 
-![](README_files/figure-gfm/Visualise%20Tuning-1.png)<!-- -->![](README_files/figure-gfm/Visualise%20Tuning-2.png)<!-- -->
+![](README_files/figure-gfm/Visualise%20Tuning-1.png)<!-- -->![](README_files/figure-gfm/Visualise%20Tuning-2.png)<!-- -->![](README_files/figure-gfm/Visualise%20Tuning-3.png)<!-- -->
 
 Since we cannot use one set of parameter to satisfy both accuracy and
 sensitivity, however we want to predict the positive class corresponding
@@ -1021,17 +1041,17 @@ this tree are mtry 2 and node size 1000.
 ``` r
 set.seed(111111)
 rf_mod_final <- randomForest(Response ~ ., # Set tree formula
-                       data = smote_data, # Set dataset
+                       data = smote_data[,1:15], # Set dataset
                        ntree = 800,
                        nodesize=1000,
-                       mtry=2 
+                       mtry=2
                        ) # Set number of trees to use
 rf_mod_final # final random forest model
 ```
 
     ## 
     ## Call:
-    ##  randomForest(formula = Response ~ ., data = smote_data, ntree = 800,      nodesize = 1000, mtry = 2) 
+    ##  randomForest(formula = Response ~ ., data = smote_data[, 1:15],      ntree = 800, nodesize = 1000, mtry = 2) 
     ##                Type of random forest: classification
     ##                      Number of trees: 800
     ## No. of variables tried at each split: 2
@@ -1045,7 +1065,7 @@ rf_mod_final # final random forest model
 ``` r
 rf_preds_final <- predict(rf_mod_final, test_subset, type = "prob") # Create predictions for random forest model
 
-# Convert predictions to classes, using 0.5
+# Convert predictions to classes, using 0.5 rule
 rf_pred_class <- rep("NOInterest", nrow(rf_preds_final))
 rf_pred_class[rf_preds_final[,1] >= 0.5] <- "Interest"
 
@@ -1086,9 +1106,21 @@ little bit higher than the naive random forest model. And it is
 reasonable that accuracy is 66.45% since we did not choose the parameter
 that were the best for enhancing accuracy score. Let’s keep those scores
 in mind and we will use XGBoost to build the model to see how it will
-go.
+go. Now, we can plot the variable importance using `varImpPlot`:
 
-## XGBoost
+The higher mean decrease in Gini, the higher variable importance for
+that variable would be. Therefore, we can conclude that *whether vehicle
+damaged or not and whether customers already have auto insurance or do
+not have auto insurance* are the most important variables. Next step, we
+will use XGBoost to build model and see if XGBoost model can perform
+better than random forest model.
+
+``` r
+varImpPlot(rf_mod_final)
+```
+
+![](README_files/figure-gfm/random%20forest%20variable%20importance-1.png)<!-- -->
+\#\# XGBoost
 
 ``` r
 library(xgboost) # load XGBoost
@@ -1129,15 +1161,20 @@ library(SHAPforxgboost) # Load shap for XGBoost
 Prepare for train and test matrix for XGBoost model
 
 ``` r
+smote_data$new_response =0
+smote_data$new_response[smote_data$Response=="Interest"] <- 1
 #create train matrix
 dtrain_ins <- xgb.DMatrix(data = as.matrix(smote_data[, 1:14]), 
-                          label = as.numeric(smote_data$Response) - 1) 
+                          label =smote_data$new_response) 
+
 # Create test matrix
+test_subset$new_response =0
+test_subset$new_response[test_subset$Response=="Interest"] <- 1
 dtest_ins <- xgb.DMatrix(data = as.matrix(test_subset[, 1:14]), 
-                         label = as.numeric(test_subset$Response) - 1)
+                         label = test_subset$new_response)
 ```
 
-Note: Label: 1 means NOInterst Label: 0 means Interest
+Note: Label: 0 means NOInterst Label: 1 means Interest
 
 ``` r
 set.seed(111111)
@@ -1160,15 +1197,14 @@ bst_initial <- xgboost(data = dtrain_ins, # Set training data
     ## [81] train-auc:0.950687  train-error:0.141778 
     ## [100]    train-auc:0.956885  train-error:0.132593
 
-Instead of using 0.5 as cut off point, we will use `OptimalCutpoints`
-package to decide which is the best optimal points for our confusion
-matrix
+we will use `OptimalCutpoints` package and `0.5 cutpoint rule`to decide
+which is the best optimal points for our confusion matrix
 
 ``` r
 library(OptimalCutpoints) # load package for setting up optimal points
 boost_preds <- predict(bst_initial, dtrain_ins) # Create predictions for xgboost model (dtrain_ins)
 # Join predictions and actual
-pred_dat <- cbind.data.frame(boost_preds, as.numeric(smote_data$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds, smote_data$new_response)
 names(pred_dat) <- c("predictions", "response")
 
 # use train train to determine the best optimal cut point
@@ -1176,17 +1212,17 @@ oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency")
+                       methods = "MaxEfficiency")  #MaxSpSe
 
 boost_preds_1 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model (dtest_ins)
 
-pred_dat <- cbind.data.frame(boost_preds_1 , as.numeric(test_subset$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds_1 , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds_1))  #create one column of 0 
-boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds_1 >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1 
 # replace those larger than cut off point as 1
 
-t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
+t <- table(boost_pred_class, test_subset$new_response) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
 
@@ -1194,8 +1230,8 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
     ## 
     ##                 
     ## boost_pred_class     0     1
-    ##                0  1715  3958
-    ##                1   757 13570
+    ##                0 13570   757
+    ##                1  3958  1715
     ##                                           
     ##                Accuracy : 0.7642          
     ##                  95% CI : (0.7583, 0.7701)
@@ -1206,77 +1242,69 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.7742          
-    ##             Specificity : 0.6938          
-    ##          Pos Pred Value : 0.9472          
-    ##          Neg Pred Value : 0.3023          
-    ##              Prevalence : 0.8764          
-    ##          Detection Rate : 0.6785          
-    ##    Detection Prevalence : 0.7164          
-    ##       Balanced Accuracy : 0.7340          
+    ##             Sensitivity : 0.69377         
+    ##             Specificity : 0.77419         
+    ##          Pos Pred Value : 0.30231         
+    ##          Neg Pred Value : 0.94716         
+    ##              Prevalence : 0.12360         
+    ##          Detection Rate : 0.08575         
+    ##    Detection Prevalence : 0.28365         
+    ##       Balanced Accuracy : 0.73398         
     ##                                           
     ##        'Positive' Class : 1               
     ## 
 
-For our original XGBoost model we have 77% accuracy and 78.88%
-sensitivity. We hope we can enhance accuracy rate and sensitivity rate
-by tuning the model.
-
-This model predicts 77% accuracy for all correct predictions including
-true positive and true negative and predicts 78.88% sensitivity for
-actual interested customers are correctly predicted as interested
-
-Note that for this problem we are particularly interested in predicting
-the positive class corresponding to INTEREST customers, so we will look
-at sensitivity as well as overall accuracy.
-
-As you may have the question, why not use 0.5 as cut point? I did try
-with 0.5 as cut point with very low accuracy and sensitivity. Thus we
-will keep use optimal cut point for later process.
-
 ``` r
  boost_preds_1_ins05 <- predict(bst_initial, dtest_ins) # Create predictions for xgboost model
 
- pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$Response)
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_1_ins05, test_subset$new_response)
 
- boost_pred_class_ins05 <- rep("NOInterest", length(boost_preds_1_ins05))
- boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- "Interest"
+ boost_pred_class_ins05 <- rep(0, length(boost_preds_1_ins05))
+ boost_pred_class_ins05[boost_preds_1_ins05 >= 0.5] <- 1
 
- confusionMatrix(as.factor(boost_pred_class_ins05),
-                 test_subset$Response, positive = "Interest")
+ t <- table(boost_pred_class_ins05, test_subset$new_response) # Create table
+ confusionMatrix(t, positive = "1")
 ```
 
     ## Confusion Matrix and Statistics
     ## 
-    ##             Reference
-    ## Prediction   Interest NOInterest
-    ##   Interest        413      12446
-    ##   NOInterest     2059       5082
+    ##                       
+    ## boost_pred_class_ins05     0     1
+    ##                      0 12446   413
+    ##                      1  5082  2059
     ##                                          
-    ##                Accuracy : 0.2748         
-    ##                  95% CI : (0.2686, 0.281)
+    ##                Accuracy : 0.7252         
+    ##                  95% CI : (0.719, 0.7314)
     ##     No Information Rate : 0.8764         
     ##     P-Value [Acc > NIR] : 1              
     ##                                          
-    ##                   Kappa : -0.1936        
+    ##                   Kappa : 0.2998         
     ##                                          
     ##  Mcnemar's Test P-Value : <2e-16         
     ##                                          
-    ##             Sensitivity : 0.16707        
-    ##             Specificity : 0.28994        
-    ##          Pos Pred Value : 0.03212        
-    ##          Neg Pred Value : 0.71167        
-    ##              Prevalence : 0.12360        
-    ##          Detection Rate : 0.02065        
-    ##    Detection Prevalence : 0.64295        
-    ##       Balanced Accuracy : 0.22850        
+    ##             Sensitivity : 0.8329         
+    ##             Specificity : 0.7101         
+    ##          Pos Pred Value : 0.2883         
+    ##          Neg Pred Value : 0.9679         
+    ##              Prevalence : 0.1236         
+    ##          Detection Rate : 0.1029         
+    ##    Detection Prevalence : 0.3570         
+    ##       Balanced Accuracy : 0.7715         
     ##                                          
-    ##        'Positive' Class : Interest       
+    ##        'Positive' Class : 1              
     ## 
 
-``` r
-# when cutoff point is 0.5, we got very low accuracy and sensitivity rate 
-```
+It seems that `0.5% cutpoint rule` performed better on
+sensitivity(83.29%) and specificity(71.01%). We hope we can enhance
+sensitivity rate and specificity rate by tuning the model.
+
+This model predicts 83.29% sensitivity for actual interested customers
+are correctly predicted as interested and 71.01% specificity for actual
+non interested customers are correctly predicted as non interested.
+
+Note that for this problem we are particularly interested in predicting
+the positive class corresponding to INTEREST(“1”) customers, so we will
+look at sensitivity as well as overall accuracy.
 
 Visualize and decide the optimal number of iterations for XGBoost
 
@@ -1311,7 +1339,7 @@ ggplot(bst$evaluation_log, aes(x=iter,y=test_error_mean))+
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
-![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 Based on the graph and results, the optimal number of iterations is 402.
 We will set the number of iterations to 500
@@ -1418,11 +1446,11 @@ cbind.data.frame(gamma_vals, auc_vec, error_vec)
 ```
 
     ##   gamma_vals   auc_vec error_vec
-    ## 1       0.00 0.9092052 0.1711704
-    ## 2       0.05 0.9107578 0.1698236
-    ## 3       0.10 0.9096066 0.1708036
-    ## 4       0.15 0.9095484 0.1707622
-    ## 5       0.20 0.9100444 0.1734970
+    ## 1       0.00 0.9118208 0.1695378
+    ## 2       0.05 0.9097510 0.1702724
+    ## 3       0.10 0.9108424 0.1674558
+    ## 4       0.15 0.9100072 0.1719468
+    ## 5       0.20 0.9108096 0.1687622
 
 It seems that a `gamma` value of 0 gives us the highest accuracy rate
 (auc\_vec) and lowest error rate. Before we proceed lets re-calibrate
@@ -1503,31 +1531,31 @@ We can now the visualize the result of tuning these parameters:
 ![](README_files/figure-gfm/visualise%20tuning%20sample%20params-1.png)<!-- -->![](README_files/figure-gfm/visualise%20tuning%20sample%20params-2.png)<!-- -->
 
     ##    subsample colsample_by_tree       auc     error
-    ## 1        0.6               0.6 0.9075878 0.1739870
-    ## 2        0.7               0.6 0.9102726 0.1721094
-    ## 3        0.8               0.6 0.9116730 0.1695378
-    ## 4        0.9               0.6 0.9101084 0.1732932
-    ## 5          1               0.6 0.9118518 0.1720278
-    ## 6        0.6               0.7 0.9079678 0.1720276
-    ## 7        0.7               0.7 0.9097502 0.1703132
-    ## 8        0.8               0.7 0.9114902 0.1685986
-    ## 9        0.9               0.7 0.9123072 0.1677414
-    ## 10         1               0.7 0.9124880 0.1712520
-    ## 11       0.6               0.8 0.9070866 0.1708440
-    ## 12       0.7               0.8 0.9081286 0.1703132
-    ## 13       0.8               0.8 0.9103678 0.1689660
-    ## 14       0.9               0.8 0.9123740 0.1683128
-    ## 15         1               0.8 0.9117762 0.1694152
-    ## 16       0.6               0.9 0.9065286 0.1702724
-    ## 17       0.7               0.9 0.9074198 0.1700682
-    ## 18       0.8               0.9 0.9098206 0.1687618
-    ## 19       0.9               0.9 0.9119014 0.1686804
-    ## 20         1               0.9 0.9106896 0.1715378
-    ## 21       0.6                 1 0.9016056 0.1726806
-    ## 22       0.7                 1 0.9056930 0.1710890
-    ## 23       0.8                 1 0.9088962 0.1691294
-    ## 24       0.9                 1 0.9089498 0.1696598
-    ## 25         1                 1 0.9092052 0.1711704
+    ## 1        0.6               0.6 0.9107198 0.1706812
+    ## 2        0.7               0.6 0.9120830 0.1706396
+    ## 3        0.8               0.6 0.9128660 0.1684354
+    ## 4        0.9               0.6 0.9138858 0.1682720
+    ## 5          1               0.6 0.9107444 0.1724362
+    ## 6        0.6               0.7 0.9099420 0.1705990
+    ## 7        0.7               0.7 0.9115770 0.1694972
+    ## 8        0.8               0.7 0.9125574 0.1689252
+    ## 9        0.9               0.7 0.9139356 0.1678640
+    ## 10         1               0.7 0.9126166 0.1705172
+    ## 11       0.6               0.8 0.9098688 0.1679046
+    ## 12       0.7               0.8 0.9114212 0.1673740
+    ## 13       0.8               0.8 0.9126140 0.1652512
+    ## 14       0.9               0.8 0.9124304 0.1686804
+    ## 15         1               0.8 0.9124512 0.1711708
+    ## 16       0.6               0.9 0.9072462 0.1697828
+    ## 17       0.7               0.9 0.9104444 0.1672926
+    ## 18       0.8               0.9 0.9127678 0.1660270
+    ## 19       0.9               0.9 0.9127636 0.1639044
+    ## 20         1               0.9 0.9127020 0.1682722
+    ## 21       0.6                 1 0.9058678 0.1681910
+    ## 22       0.7                 1 0.9079108 0.1663536
+    ## 23       0.8                 1 0.9106072 0.1651288
+    ## 24       0.9                 1 0.9114596 0.1660678
+    ## 25         1                 1 0.9118208 0.1695378
 
 It seems that the optimal values of the parameters are a subsample
 parameter of 0.9 and a column sample by tree parameter of 0.7. This
@@ -1678,7 +1706,7 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
               subsample =  0.9, # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 450, # Set number of rounds
+              nrounds = 200, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
@@ -1693,23 +1721,23 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
 ``` r
 boost_preds <- predict(bst_final, dtrain_ins) # Create predictions for XGBoost model on training data
 
-pred_dat <- cbind.data.frame(boost_preds, as.numeric(smote_data$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds, smote_data$new_response)
 names(pred_dat) <- c("predictions", "response")
 oc<- optimal.cutpoints(X = "predictions",
                        status = "response",
                        tag.healthy = 0,
                        data = pred_dat,
-                       methods = "MaxEfficiency")
+                       methods = "MaxSpSe") # MaxSpSe
 
 boost_preds <- predict(bst_final, dtest_ins) # Create predictions for XGBoost model
 
-pred_dat <- cbind.data.frame(boost_preds , as.numeric(test_subset$Response)-1)
+pred_dat <- cbind.data.frame(boost_preds , test_subset$new_response)
 # Convert predictions to classes, using optimal cut-off
 boost_pred_class <- rep(0, length(boost_preds))
-boost_pred_class[boost_preds >= oc$MaxEfficiency$Global$optimal.cutoff$cutoff[1]] <- 1
+boost_pred_class[boost_preds >= oc$MaxSpSe$Global$optimal.cutoff$cutoff[1]] <- 1
 
 
-t <- table(boost_pred_class, as.numeric(test_subset$Response)-1) # Create table
+t <- table(boost_pred_class, test_subset$new_response) # Create table
 confusionMatrix(t, positive = "1") # Produce confusion matrix
 ```
 
@@ -1717,26 +1745,66 @@ confusionMatrix(t, positive = "1") # Produce confusion matrix
     ## 
     ##                 
     ## boost_pred_class     0     1
-    ##                0  1710  4064
-    ##                1   762 13464
+    ##                0 13524   791
+    ##                1  4004  1681
     ##                                           
-    ##                Accuracy : 0.7587          
-    ##                  95% CI : (0.7527, 0.7646)
+    ##                Accuracy : 0.7602          
+    ##                  95% CI : (0.7543, 0.7662)
     ##     No Information Rate : 0.8764          
     ##     P-Value [Acc > NIR] : 1               
     ##                                           
-    ##                   Kappa : 0.2922          
+    ##                   Kappa : 0.2898          
     ##                                           
     ##  Mcnemar's Test P-Value : <2e-16          
     ##                                           
-    ##             Sensitivity : 0.7681          
-    ##             Specificity : 0.6917          
-    ##          Pos Pred Value : 0.9464          
-    ##          Neg Pred Value : 0.2962          
-    ##              Prevalence : 0.8764          
-    ##          Detection Rate : 0.6732          
-    ##    Detection Prevalence : 0.7113          
-    ##       Balanced Accuracy : 0.7299          
+    ##             Sensitivity : 0.68002         
+    ##             Specificity : 0.77157         
+    ##          Pos Pred Value : 0.29569         
+    ##          Neg Pred Value : 0.94474         
+    ##              Prevalence : 0.12360         
+    ##          Detection Rate : 0.08405         
+    ##    Detection Prevalence : 0.28425         
+    ##       Balanced Accuracy : 0.72579         
+    ##                                           
+    ##        'Positive' Class : 1               
+    ## 
+
+``` r
+boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xgboost model
+
+ pred_dat_ins05 <- cbind.data.frame(boost_preds_2_ins05, test_subset$new_response)
+
+ boost_pred_class_2_ins05 <- rep(0, length(boost_preds_2_ins05))
+ boost_pred_class_2_ins05[boost_preds_2_ins05 >= 0.5] <- 1
+
+ t <- table(boost_pred_class_2_ins05, test_subset$new_response) # Create table
+ confusionMatrix(t, positive = "1")
+```
+
+    ## Confusion Matrix and Statistics
+    ## 
+    ##                         
+    ## boost_pred_class_2_ins05     0     1
+    ##                        0 12793   553
+    ##                        1  4735  1919
+    ##                                           
+    ##                Accuracy : 0.7356          
+    ##                  95% CI : (0.7294, 0.7417)
+    ##     No Information Rate : 0.8764          
+    ##     P-Value [Acc > NIR] : 1               
+    ##                                           
+    ##                   Kappa : 0.2932          
+    ##                                           
+    ##  Mcnemar's Test P-Value : <2e-16          
+    ##                                           
+    ##             Sensitivity : 0.77629         
+    ##             Specificity : 0.72986         
+    ##          Pos Pred Value : 0.28840         
+    ##          Neg Pred Value : 0.95856         
+    ##              Prevalence : 0.12360         
+    ##          Detection Rate : 0.09595         
+    ##    Detection Prevalence : 0.33270         
+    ##       Balanced Accuracy : 0.75308         
     ##                                           
     ##        'Positive' Class : 1               
     ## 
@@ -1764,7 +1832,7 @@ roc_1 = roc(test_subset$Response, boost_preds_1) # naive model
 
     ## Setting levels: control = Interest, case = NOInterest
 
-    ## Setting direction: controls < cases
+    ## Setting direction: controls > cases
 
 ``` r
 # Calculate final model ROC
@@ -1772,7 +1840,7 @@ roc_2 = roc(test_subset$Response, boost_preds) # final model
 ```
 
     ## Setting levels: control = Interest, case = NOInterest
-    ## Setting direction: controls < cases
+    ## Setting direction: controls > cases
 
 ``` r
 # Print initial model AUC
@@ -1783,7 +1851,8 @@ plot.roc(roc_2, print.auc = TRUE, print.auc.x = 0, print.auc.y = 0.6, col ="blue
 
 ![](README_files/figure-gfm/compare%20auc-1.png)<!-- -->
 
-And naive models still performs a little better than our final model.
+And naive models (marked in red) still performs a little better than our
+final model.
 
 ### Variable Importance with XGBoost - Global Interpretation
 
@@ -1909,6 +1978,9 @@ explainer_caret <- lime(smote_data, bst_initial, n_bins = 5)
     ## Warning: Vehicle_Damage_Yes does not contain enough variance to use quantile
     ## binning. Using standard binning instead.
 
+    ## Warning: new_response does not contain enough variance to use quantile binning.
+    ## Using standard binning instead.
+
 ``` r
 explanation_caret <- explain(
   x = test_subset[6:9,1:14],  # choose 2 rows for local interpretation
@@ -1935,15 +2007,14 @@ test_subset[6:9,15]
     ## 3: NOInterest
     ## 4: NOInterest
 
-Note: Label: 1 means NOInterst Label: 0 means Interest
+Note: Label: 0 means NOInterst Label: 1 means Interest
 
 ``` r
 plot_explanations(explanation_caret)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> 
-
-The heatmap informed us of vehicle\_insured strong impact versus other variables
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- --> The heatmap
+informed us of vehicle\_insured strong impact versus other variables
 even just in four cases.
 
 ``` r
@@ -1953,7 +2024,7 @@ plot_features(explanation_caret,ncol=2)
 ![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 Case 1: When vehicle\_insured\_0 is less than 0.2, our model deemed case
-response as 1 (“NOInterest”), which means customers who did have
+response as 0 (“NOInterest”), which means customers who did have
 purchased vehicle insurance will NOT be interested in buying company’s
 vehicle insurance.
 
@@ -1961,7 +2032,7 @@ Case 2: Although vehicle\_insured\_0 is a contradicted variable to the
 prediction in case 2, model still predicted correctly for case 2.
 
 Case 3 & 4: We can see that when vehicle\_insured\_0 is larger than 0.8,
-our model deemed case response as 0 (“Interest”), which means customers
+our model deemed case response as 1 (“Interest”), which means customers
 who did not purchase vehicle insurance before will be interested for
 case three and four; nevertheless, the model’s result is contrary to the
 actual response even with the supportive variable.

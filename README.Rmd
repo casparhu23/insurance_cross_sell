@@ -1056,7 +1056,6 @@ boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xg
 
  t <- table(boost_pred_class_2_ins05, test_subset$new_response) # Create table
  confusionMatrix(t, positive = "1")
-
 ```
 
 
