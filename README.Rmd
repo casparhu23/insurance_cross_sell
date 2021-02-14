@@ -1010,7 +1010,7 @@ bst_final <- xgboost(data = dtrain_ins, # Set training data
               subsample =  0.9, # Set proportion of training data to use in tree
               colsample_bytree = 0.7, # Set number of variables to use in each tree
                
-              nrounds = 200, # Set number of rounds
+              nrounds = 300, # Set number of rounds
               early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
                
               verbose = 0, # stay silent not printing
