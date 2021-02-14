@@ -38,28 +38,34 @@ colnames(train) # check column names for the dataset
 library(scales)
 library(viridis)
 library(hrbrthemes)
-ggplot(train, aes(x=Annual_Premium, fill=Response)) + 
+ggplot(train, aes(x=Annual_Premium, group=Response, fill=Response)) + 
   geom_density(alpha = 0.3,adjust=1.5) + # Use geom_density to get density plot
   theme_ipsum() + # Set theme for plot
   theme(panel.grid.major = element_blank(), # Turn of the background grid
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank()) +
+        panel.background = element_blank(),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12))+
   scale_x_continuous(labels=comma)+
   scale_y_continuous(labels=comma)+
   labs(x = "Annual Premium", # Set plot labels
-       title = "Density plot of Annual Premium")
+       title = "Density plot of Annual Premium")+
+  scale_fill_discrete(name = "Response", labels = c("Not Interested", "Interested"))
 
-ggplot(train, aes(x=Age, fill=Response)) + 
+ggplot(train, aes(x=Age, group=Response, fill=Response)) + 
   geom_density(alpha = 0.3,adjust=1.5) + # Use geom_density to get density plot
   theme_ipsum() + # Set theme for plot
   theme(panel.grid.major = element_blank(), # Turn of the background grid
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank()) +
+        panel.background = element_blank(),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12))+
   scale_y_continuous(labels=comma)+
   labs(x = "Age", # Set plot labels
-       title = "Density plot of Age")
+       title = "Density plot of Age")+
+  scale_fill_discrete(name = "Response", labels = c("Not Interested", "Interested"))
 ```
 
 ```{r}
@@ -1005,12 +1011,12 @@ g_7
 stopCluster(cl)
 ```
 
-From this it looks like an eta value of 0.1 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
+From this it looks like an eta value of 0.05 gives the best results for this dataset. We can now fit our final model using our tuned hyper parameters:
 
 ```{r fit final xgb model}
 set.seed(111111)
 bst_final <- xgboost(data = dtrain_ins, # Set training data
-              eta = 0.1, # Set learning rate
+              eta = 0.05, # Set learning rate
               max.depth =  15, # Set max depth
               min_child_weight = 1, # Set minimum number of samples in node to split
               gamma = 0, # Set minimum loss reduction for split
@@ -1168,3 +1174,27 @@ Case 2: Although vehicle_insured_0 is a contradicted variable to the prediction 
 
 Case 3 & 4: We can see that when vehicle_insured_0 is larger than 0.8, our model deemed case response as 1 ("Interest"), which means customers who did not purchase vehicle insurance before will be interested for case three and four; nevertheless, the model's result is contrary to the actual response even with the supportive variable. 
 
+## Recommendations
+
+Insurance company should make advertisements towards customers who have the following traits to maximize cross sell revenue on auto insurance.
+• Have driving license already and do not have auto insurance yet
+  o Send customers advertisements of auto insurance Immediately
+• Owned older vehicles (> 2 years)
+  o Set price level strategically based on the age of vehicles
+• Damaged his/her vehicles in the past
+  o Set price level strategically based on damage frequency and damage level
+• Male customers
+  o Make customized advertisements toward males customers especially
+Insurance company should further analyze the following regions:
+• Top 2: Region 8 and 28:
+  o Identify the peak age groups: 26, 48, 53, 67 and 72 years old;
+Annual premium 25K to 75K (majority); mean premium around 37K
+  o Research the successful elements ex: manager effectiveness, advertisements, geographical information, etc.
+  o Promote successful elements/model to other similar regions 
+• Bottom 2: Region 31 and 48:
+  o Figure out the reasons why only a few samples from those two regions o Investigate the reasons of low annual premium quotes
+  o Adjust sales strategy based on further analysis
+
+## Considerations
+
+We did not spend too much time on policy sales channel, because we would not know what each code stand    for. Insurance company can use group by each channel and analyze them further. While we do not know       exactly whether the vehicle insurance that were bought already are from competitors or this company       itself. We assume all the vehicle insurance that were bought already from the competitors.
