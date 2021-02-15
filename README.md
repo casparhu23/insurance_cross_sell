@@ -28,36 +28,13 @@ test <- fread("data/insurance_test.csv")
 
 # Executive Summary
 
-This data set is from Kaggle
-(<https://www.kaggle.com/anmolkumar/health-insurance-cross-sell-prediction>),
-which describes a health insurance company collecting customers’
-demographics, vehicle information, and some insurance policy. The
-purpose of this project is to perform two types of analysis: inference
-and prediction.
+This data set is from Kaggle (<https://www.kaggle.com/anmolkumar/health-insurance-cross-sell-prediction>).We faced with the problem on how to find out the targeted customer segments regarding customers demographics, vehicle, and insurance information and build a model to predict whether health insurance customers will be interested in auto insurance. The purpose of this project is to perform two types of analysis: inference and prediction. This executive summary will walk you through our main methodologies and key findings and actionable solutions for the insurance company to improve their marketing strategy and enhance their business outcomes.
 
-As for the inference perspective, we performed various analysis on
-correlation (numeric), association (categorical), interaction, and mixed
-models. One of the interesting insights from this data is that top 2
-regions (28 and 8) and bottom 2 regions (31 and 48) shows almost the
-same customers’ demographics. The only difference is that top 2 regions
-have more population (data). Another insights is that when customers do
-not have vehicle insurance, customers who are interested in the
-company’s insurance are willing to pay higher annual premium than
-customers that have no interests.
+We have conducted chi-squared, interaction, logistic regression, and mixed models from the inference perspectives. We concluded that male customers, customers who have license, customers who do not have vehicle insurance are much more likely to be interested in auto insurance. Customers who damaged his or her vehicles in the past and customers who owned older vehicles (more than 2 years old) are also much more likely to be interested in auto insurance. We also found out top 2 regions and bottom 2 regions share similarities on age and annual premium variables.
 
-As for the prediction point of view, we built random forest model and
-XGBoost models. We obtained 67.81% for accuracy and 94.78% for
-sensitivity. That result demonstrates us a decent model. Surprisingly,
-XGBoost model does not perform as well as random forest model in terms
-of sensitivity score that is almost 15% lower than random forest model
-performed. Furthermore, I think this modeling shows us sometimes the
-orginal XGBoost setting works for the best. That also concludes why
-programmers who created XGBoost model set those initial parameters as
-the standard. However, XGBoost still generated AUC for 0.83. As we know
-higher AUC can have better performance on differentiating positive and
-negative classes. Therefore, we still think XGBoost model is not the
-worst model but not as well as random forest especially for this data
-set.
+Furthermore, we also built tree based models such as tried random forest and XGBoost model. We obtained 66.38% for accuracy and 95.75% for sensitivity for our random forest model, while the XGBoost model does not perform as well as the random forest model in terms of sensitivity score that is almost 12% lower than the random forest model performed. However, XGBoost still generated an AUC of 0.83. As we know, higher AUC can have better performance on differentiating positive and negative classes. Therefore, we still think the XGBoost model is not the worst but not as well as random forest especially for this data set. We further investigated feature importance through global and local aspects.
+
+We provided ten practical recommendations for insurance company to take actions to adjust marketing promotion strategy and customize auto insurance advertisements for various customer segments, and research top two regions successful metrics or elements not limited to manager effectiveness, advertisements, geographical advantages, etc. Eventually, we can promote this successful models to similar regions to maximize revenue.
 
 # Inference Analysis
 
@@ -966,12 +943,12 @@ confusionMatrix(as.factor(randomforest_pred_class),
     ##        'Positive' Class : Interest        
     ## 
 
-For our original random forest model we have 68.32% accuracy and 94.09%
+For our original random forest model we have 67.98% accuracy and 94.70%
 sensitivity. We hope we can enhance accuracy rate and sensitivity rate
 by tuning the model.
 
-This model predicts 68.32% accuracy for all correct predictions
-including true positive and true negative and predicts 94.09%
+This model predicts 67.98% accuracy for all correct predictions
+including true positive and true negative and predicts 94.70%
 sensitivity for actual interested customers are correctly predicted as
 interested
 
@@ -1107,9 +1084,9 @@ confusionMatrix(as.factor(rf_pred_class),
     ##        'Positive' Class : Interest        
     ## 
 
-From the confusion matrix, we got better sensitivity 95.47%, which was a
+From the confusion matrix, we got better sensitivity 95.75%, which was a
 little bit higher than the naive random forest model. And it is
-reasonable that accuracy is 66.45% since we did not choose the parameter
+reasonable that accuracy is 66.38% since we did not choose the parameter
 that were the best for enhancing accuracy score. Let’s keep those scores
 in mind and we will use XGBoost to build the model to see how it will
 go. Now, we can plot the variable importance using `varImpPlot`:
@@ -1826,9 +1803,9 @@ boost_preds_2_ins05 <- predict(bst_final, dtest_ins) # Create predictions for xg
     ##        'Positive' Class : 1               
     ## 
 
-As you may recall that our original XGBoost model’s sensitivity is
+The 0.5 rule outperformed the optimal cut point again. As you may recall that our original XGBoost model’s sensitivity is
 83.29% and specificity is 71.01%, but now we have 80.06% and 72.13% for
-accuracy and sensitivity. The slight decreasing percentages on both
+sensitivity and specificity. The slight decreasing percentages on both
 stats show us that sometimes the orginal XGBoost setting works for the
 best. That also concludes why programmers who created XGBoost model set
 those initial parameters as the standard.
