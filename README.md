@@ -2080,4 +2080,7 @@ not know what each code stand for. Insurance company can use group by
 each channel and analyze them further. While we do not know exactly
 whether the vehicle insurance that were bought already are from
 competitors or this company itself. We assume all the vehicle insurance
-that were bought already from the competitors.
+that were bought already from the competitors. 
+
+Depending on the cost of marketing channel, we would determine the relative importance of specificity. For instance, if the company uses email marketing, the cost will be relatively lower than phone calls, which require more manual labor. For this specific problem, it seems that high sensitivity would mean that we are correctly identifying all the people who would be interested in auto insurance. Therefore, we chose sensitivity metrics over specificity. 
+
