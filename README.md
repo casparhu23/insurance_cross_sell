@@ -25,6 +25,7 @@ library(dplyr)
 train <- fread("data/insurance_train.csv")
 test <- fread("data/insurance_test.csv")
 ```
+![](https://www.iii.org/sites/default/files/images/p_auto_coverage_473968822.jpg)
 
 # Executive Summary
 
